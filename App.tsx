@@ -42,7 +42,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white leading-tight tracking-tight">مدير التكوين البيداغوجي</h1>
-                <p className="text-xs text-slate-400">المساعد الذكي لتسيير مركز التكوين التحضيري</p>
+                <p className="text-xs text-slate-400">Teacher Training Manager - Algeria</p>
               </div>
             </div>
             
