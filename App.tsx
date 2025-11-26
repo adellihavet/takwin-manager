@@ -53,7 +53,7 @@ function App() {
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-dzgreen-500/10 text-dzgreen-400 border border-dzgreen-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
                 >
                     <LayoutDashboard className="w-4 h-4" />
-                    <span className="hidden lg:inline">القيادة</span>
+                    <span className="hidden lg:inline">لوحة القيادة</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('curriculum')}
@@ -88,7 +88,7 @@ function App() {
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === 'trainees' ? 'bg-dzgreen-500/10 text-dzgreen-400 border border-dzgreen-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
                 >
                     <Users className="w-4 h-4" />
-                    <span className="hidden lg:inline">المتكونين</span>
+                    <span className="hidden lg:inline">المتكونون</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('certificates')}
@@ -133,7 +133,7 @@ function App() {
       
       <footer className="border-t border-slate-800 mt-12 py-8 bg-slate-950 print:hidden">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-slate-500">
-          <p>© 2025 منصة تسيير التكوين البيداغوجي التحضيري للأساتذة.</p>
+          <p>© 2025 منصة تسيير التكوين التحضيري للأساتذة (كمال دليحة).</p>
         </div>
       </footer>
     </div>

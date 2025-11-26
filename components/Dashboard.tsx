@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, PieChart as PieIcon, BarChart3, Map, ClipboardX, AlertTriangle } from 'lucide-react';
+import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, PieChart as PieIcon, BarChart3, Map, ClipboardX, AlertTriangle, RefreshCcw, Loader2 } from 'lucide-react';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS, MODULES } from '../constants';
 import { Specialty, TrainerConfig, ProjectDatabase, InstitutionConfig, Trainee, AttendanceRecord } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
@@ -25,6 +25,7 @@ const Dashboard: React.FC = () => {
   });
   const [isEditingInst, setIsEditingInst] = useState(false);
   const [editInstitution, setEditInstitution] = useState<InstitutionConfig>(institution);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
 
   // State for Trainers
@@ -34,49 +35,80 @@ const Dashboard: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to reload all data from localStorage
+  const refreshAllData = () => {
+    setIsRefreshing(true);
+    let loadedTraineesCount = 0;
+    let loadedAbsenceCount = 0;
+
+    // Direct synchronous update to ensure state changes immediately
+    try {
+        const savedData = localStorage.getItem('takwin_specialties_db');
+        if (savedData) {
+            const parsed = JSON.parse(savedData);
+            setSpecialties(parsed);
+            setEditData(parsed);
+        }
+
+        const savedInst = localStorage.getItem('takwin_institution_db');
+        if (savedInst) {
+            const parsed = JSON.parse(savedInst);
+            setInstitution(parsed);
+            setEditInstitution(parsed);
+        }
+
+        const savedTrainers = localStorage.getItem('takwin_trainers_db');
+        if (savedTrainers) {
+            const parsed = JSON.parse(savedTrainers);
+            setTrainerConfig(parsed);
+            setEditTrainerConfig(parsed);
+        }
+
+        const savedTrainees = localStorage.getItem('takwin_trainees_db');
+        if (savedTrainees) {
+            const parsed = JSON.parse(savedTrainees);
+            setTrainees(parsed); 
+            loadedTraineesCount = parsed.length;
+        }
+
+        const savedAtt = localStorage.getItem('takwin_attendance_db');
+        if (savedAtt) {
+            const parsed = JSON.parse(savedAtt);
+            setAttendance(parsed); 
+            // Count exact absences 'A'
+            loadedAbsenceCount = Object.values(parsed).filter(x => x === 'A').length;
+        }
+
+        // Small delay just for UI feedback
+        setTimeout(() => {
+            setIsRefreshing(false);
+            alert(`تم تحديث البيانات!\n\n- عدد المتربصين: ${loadedTraineesCount}\n- عدد الغيابات المسجلة: ${loadedAbsenceCount}`);
+        }, 300);
+
+    } catch (e) {
+        console.error(e);
+        setIsRefreshing(false);
+        alert('حدث خطأ أثناء تحديث البيانات');
+    }
+  };
+
   // Load from local storage on mount
   useEffect(() => {
-    // Load Specialties
+    // We call the internal logic without alert on mount
     const savedData = localStorage.getItem('takwin_specialties_db');
-    if (savedData) {
-      try {
-        setSpecialties(JSON.parse(savedData));
-        setEditData(JSON.parse(savedData));
-      } catch (e) { console.error(e); }
-    }
-
-    // Load Institution
+    if (savedData) try { setSpecialties(JSON.parse(savedData)); setEditData(JSON.parse(savedData)); } catch(e){}
+    
     const savedInst = localStorage.getItem('takwin_institution_db');
-    if (savedInst) {
-        try {
-            setInstitution(JSON.parse(savedInst));
-            setEditInstitution(JSON.parse(savedInst));
-        } catch (e) { console.error(e); }
-    }
+    if (savedInst) try { setInstitution(JSON.parse(savedInst)); setEditInstitution(JSON.parse(savedInst)); } catch(e){}
 
-    // Load Trainers
     const savedTrainers = localStorage.getItem('takwin_trainers_db');
-    if (savedTrainers) {
-        try {
-            setTrainerConfig(JSON.parse(savedTrainers));
-            setEditTrainerConfig(JSON.parse(savedTrainers));
-        } catch (e) { console.error(e); }
-    } else {
-        setTrainerConfig({});
-        setEditTrainerConfig({});
-    }
+    if (savedTrainers) try { setTrainerConfig(JSON.parse(savedTrainers)); setEditTrainerConfig(JSON.parse(savedTrainers)); } catch(e){}
 
-    // Load Trainees
     const savedTrainees = localStorage.getItem('takwin_trainees_db');
-    if (savedTrainees) {
-        try { setTrainees(JSON.parse(savedTrainees)); } catch (e) {}
-    }
+    if (savedTrainees) try { setTrainees(JSON.parse(savedTrainees)); } catch(e){}
 
-    // Load Attendance
     const savedAtt = localStorage.getItem('takwin_attendance_db');
-    if (savedAtt) {
-        try { setAttendance(JSON.parse(savedAtt)); } catch (e) {}
-    }
+    if (savedAtt) try { setAttendance(JSON.parse(savedAtt)); } catch(e){}
   }, []);
 
   // Database Handlers
@@ -154,6 +186,13 @@ const Dashboard: React.FC = () => {
       }
 
       alert('تم استيراد قاعدة البيانات وتحديث جميع الإعدادات (بما في ذلك المتكونين والغياب) بنجاح!');
+      // Force reload data into state
+      const savedTrainees = localStorage.getItem('takwin_trainees_db');
+      if (savedTrainees) setTrainees(JSON.parse(savedTrainees));
+      
+      const savedAtt = localStorage.getItem('takwin_attendance_db');
+      if (savedAtt) setAttendance(JSON.parse(savedAtt));
+
     } catch (err) {
       alert('خطأ في قراءة الملف. تأكد من صحة التنسيق.');
       console.error(err);
@@ -240,72 +279,93 @@ const Dashboard: React.FC = () => {
 
   // --- ANALYTICS LOGIC ---
   const calculateAnalytics = () => {
-      if (!trainees || trainees.length === 0) return null;
-
       // Demographics
       let male = 0, female = 0;
       const currentYear = new Date().getFullYear();
       const ageGroups = { '20-29': 0, '30-39': 0, '40-49': 0, '+50': 0 };
       const munCounts: Record<string, number> = {};
 
-      trainees.forEach(t => {
-          // Gender
-          if (t.gender === 'M') male++; else female++;
-          
-          // Age
-          if (t.dob) {
-              let year = NaN;
-              const dobStr = t.dob.toString().trim();
-              if (dobStr.includes('-')) year = parseInt(dobStr.split('-')[0]);
-              else if (dobStr.includes('/')) {
-                  const parts = dobStr.split('/');
-                  if (parts.length === 3) year = parseInt(parts[2]);
-              } else if (dobStr.length === 4) year = parseInt(dobStr);
+      if (trainees && trainees.length > 0) {
+        trainees.forEach(t => {
+            // Gender
+            if (t.gender === 'M') male++; else female++;
+            
+            // Age
+            if (t.dob) {
+                let year = NaN;
+                const dobStr = t.dob.toString().trim();
+                if (dobStr.includes('-')) year = parseInt(dobStr.split('-')[0]);
+                else if (dobStr.includes('/')) {
+                    const parts = dobStr.split('/');
+                    if (parts.length === 3) year = parseInt(parts[2]);
+                } else if (dobStr.length === 4) year = parseInt(dobStr);
 
-              if (!isNaN(year) && year > 1900 && year <= currentYear) {
-                  const age = currentYear - year;
-                  if (age >= 20 && age < 30) ageGroups['20-29']++;
-                  else if (age >= 30 && age < 40) ageGroups['30-39']++;
-                  else if (age >= 40 && age < 50) ageGroups['40-49']++;
-                  else if (age >= 50) ageGroups['+50']++;
-              }
-          }
+                if (!isNaN(year) && year > 1900 && year <= currentYear) {
+                    const age = currentYear - year;
+                    if (age >= 20 && age < 30) ageGroups['20-29']++;
+                    else if (age >= 30 && age < 40) ageGroups['30-39']++;
+                    else if (age >= 40 && age < 50) ageGroups['40-49']++;
+                    else if (age >= 50) ageGroups['+50']++;
+                }
+            }
 
-          // Geo
-          let m = 'غير محدد';
-          if (t.municipality && t.municipality.trim().length > 0) m = t.municipality.trim();
-          munCounts[m] = (munCounts[m] || 0) + 1;
-      });
+            // Geo
+            let m = 'غير محدد';
+            if (t.municipality && t.municipality.trim().length > 0) m = t.municipality.trim();
+            munCounts[m] = (munCounts[m] || 0) + 1;
+        });
+      }
 
       const genderData = [{ name: 'ذكور', value: male, color: '#3b82f6' }, { name: 'إناث', value: female, color: '#ec4899' }];
       const ageData = Object.entries(ageGroups).map(([key, val]) => ({ name: key, value: val }));
       const geoData = Object.entries(munCounts).sort(([,a], [,b]) => b - a).slice(0, 7).map(([key, val]) => ({ name: key, value: val }));
 
       // Attendance Analytics
-      const totalMarked = Object.keys(attendance).length;
+      // 1. Identify distinct dates that have ANY record
+      const uniqueDays = new Set<string>();
+      
       let totalAbsences = 0;
-      let totalPresence = 0;
       const absenceBySpecialty: Record<string, number> = {};
       const traineeAbsenceCount: Record<string, number> = {};
 
-      Object.entries(attendance).forEach(([key, status]) => {
-          if (status === 'A') {
-              totalAbsences++;
-              // Key format: YYYY-MM-DD-ID...
-              const tId = key.substring(11); 
-              
-              traineeAbsenceCount[tId] = (traineeAbsenceCount[tId] || 0) + 1;
+      if (attendance) {
+        Object.entries(attendance).forEach(([key, status]) => {
+            // Key: YYYY-MM-DD-TRAINEE_ID
+            const dateStr = key.substring(0, 10);
+            uniqueDays.add(dateStr);
 
-              const t = trainees.find(tr => tr.id === tId);
-              if (t) {
-                  absenceBySpecialty[t.specialtyId] = (absenceBySpecialty[t.specialtyId] || 0) + 1;
-              }
-          } else {
-              totalPresence++;
-          }
-      });
+            if (status === 'A') {
+                totalAbsences++;
+                const tId = key.length > 11 ? key.substring(11) : '';
+                
+                if (tId) {
+                   traineeAbsenceCount[tId] = (traineeAbsenceCount[tId] || 0) + 1;
 
-      const attendanceRate = totalMarked > 0 ? Math.round((totalPresence / totalMarked) * 100) : 0;
+                   const t = trainees.find(tr => tr.id === tId);
+                   if (t) {
+                       absenceBySpecialty[t.specialtyId] = (absenceBySpecialty[t.specialtyId] || 0) + 1;
+                   }
+                }
+            }
+        });
+      }
+
+      // Calculation:
+      // Total Possible Presence = (Number of Days with records) * (Total Number of Trainees)
+      // This assumes if a day has records, ALL trainees were expected to be there (Implicit Presence)
+      const daysCount = uniqueDays.size || 0;
+      const traineesCount = trainees.length || 0;
+      
+      // Prevent division by zero if no data
+      let attendanceRate = 0;
+      if (daysCount > 0 && traineesCount > 0) {
+          const totalPossibleAttendance = daysCount * traineesCount;
+          const actualPresence = totalPossibleAttendance - totalAbsences;
+          attendanceRate = Math.round((actualPresence / totalPossibleAttendance) * 100);
+      } else {
+          // If no days recorded yet, assume 100% or 0% depending on preference. usually 0 or -
+          attendanceRate = 0;
+      }
       
       const absenceChartData = specialties.map(s => ({
           name: s.name,
@@ -319,7 +379,7 @@ const Dashboard: React.FC = () => {
           .slice(0, 5)
           .map(([id, count]) => {
               const t = trainees.find(tr => tr.id === id);
-              return { name: t ? `${t.surname} ${t.name}` : 'غير معروف', count, specialty: t ? specialties.find(s=>s.id === t.specialtyId)?.name : '' };
+              return { name: t ? `${t.surname} ${t.name}` : `متربص غير موجود (${id})`, count, specialty: t ? specialties.find(s=>s.id === t.specialtyId)?.name : '' };
           });
 
       return { genderData, ageData, geoData, attendanceRate, totalAbsences, absenceChartData, topAbsentees };
@@ -451,7 +511,7 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 flex items-center justify-between hover:border-blue-500/30 transition-colors group">
           <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">مجموع الأساتذة</p>
+            <p className="text-slate-400 text-sm font-medium mb-1">مجموع الأساتذة المتكونين</p>
             <h3 className="text-3xl font-bold text-white group-hover:text-blue-400 transition-colors">
                 {trainees.length > 0 ? trainees.length : totalTrainees}
             </h3>
@@ -765,75 +825,96 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* 5. ANALYTICS SECTION (FULL WIDTH) */}
-      {analytics && (
-        <div className="space-y-8">
+      <div className="space-y-8">
             {/* Demographics */}
             <div className="bg-slate-900/80 backdrop-blur p-8 rounded-2xl shadow-lg border border-slate-800/60 mt-8 animate-slideUp">
                 <h3 className="text-xl font-bold text-white mb-8 border-b border-slate-800 pb-4 flex items-center gap-2">
                     <BarChart3 className="text-blue-400 w-6 h-6" />
                     التحليل الديموغرافي والجغرافي للمتكونين
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Gender Chart */}
-                    <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                        <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
-                            <Users className="w-4 h-4 text-pink-400" /> التوزيع حسب الجنس
-                        </h4>
-                        <div className="flex-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie data={analytics.genderData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} stroke="none" label>
-                                        {analytics.genderData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                                    </Pie>
-                                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                    <Legend verticalAlign="bottom" height={36} />
-                                </PieChart>
-                            </ResponsiveContainer>
+                {trainees.length === 0 ? (
+                    <div className="text-center text-slate-500 py-12">
+                        لا توجد بيانات للمتكونين لعرض الإحصائيات. يرجى إضافة أو استيراد قائمة المتربصين.
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {/* Gender Chart */}
+                        <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
+                            <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
+                                <Users className="w-4 h-4 text-pink-400" /> التوزيع حسب الجنس
+                            </h4>
+                            <div className="flex-1">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={analytics.genderData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} stroke="none" label>
+                                            {analytics.genderData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                                        </Pie>
+                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
+                                        <Legend verticalAlign="bottom" height={36} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                        {/* Age Chart */}
+                        <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
+                            <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
+                                <Calendar className="w-4 h-4 text-purple-400" /> الفئات العمرية
+                            </h4>
+                            <div className="flex-1">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={analytics.ageData} margin={{top: 20, right: 20, left: 0, bottom: 5}}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                        <XAxis dataKey="name" tick={{fill: '#cbd5e1', fontSize: 12}} />
+                                        <YAxis tick={{fill: '#94a3b8'}} allowDecimals={false} />
+                                        <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
+                                        <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={40} name="العدد" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                        {/* Geography Chart */}
+                        <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
+                            <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
+                                <Map className="w-4 h-4 text-emerald-400" /> التوزيع الجغرافي (أعلى البلديات)
+                            </h4>
+                            <div className="flex-1">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={analytics.geoData} layout="vertical" margin={{ left: 10, right: 40, top: 10, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
+                                        <XAxis type="number" tick={{fill: '#94a3b8'}} allowDecimals={false} />
+                                        <YAxis dataKey="name" type="category" width={90} tick={{fill: '#e2e8f0', fontSize: 11, fontWeight: 'bold'}} />
+                                        <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
+                                        <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} name="العدد" />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
-                    {/* Age Chart */}
-                    <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                        <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
-                            <Calendar className="w-4 h-4 text-purple-400" /> الفئات العمرية
-                        </h4>
-                        <div className="flex-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={analytics.ageData} margin={{top: 20, right: 20, left: 0, bottom: 5}}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="name" tick={{fill: '#cbd5e1', fontSize: 12}} />
-                                    <YAxis tick={{fill: '#94a3b8'}} allowDecimals={false} />
-                                    <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                    <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={40} name="العدد" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                    {/* Geography Chart */}
-                    <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                        <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
-                            <Map className="w-4 h-4 text-emerald-400" /> التوزيع الجغرافي (أعلى البلديات)
-                        </h4>
-                        <div className="flex-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={analytics.geoData} layout="vertical" margin={{ left: 10, right: 40, top: 10, bottom: 10 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-                                    <XAxis type="number" tick={{fill: '#94a3b8'}} allowDecimals={false} />
-                                    <YAxis dataKey="name" type="category" width={90} tick={{fill: '#e2e8f0', fontSize: 11, fontWeight: 'bold'}} />
-                                    <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                    <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} name="العدد" />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
+                )}
             </div>
 
             {/* ATTENDANCE ANALYTICS */}
             <div className="bg-slate-900/80 backdrop-blur p-8 rounded-2xl shadow-lg border border-slate-800/60 animate-slideUp delay-100">
-                <h3 className="text-xl font-bold text-white mb-8 border-b border-slate-800 pb-4 flex items-center gap-2">
-                    <ClipboardX className="text-red-400 w-6 h-6" />
-                    مؤشرات المواظبة والانضباط
-                </h3>
+                <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                        <ClipboardX className="text-red-400 w-6 h-6" />
+                        مؤشرات المواظبة والانضباط
+                    </h3>
+                    <button 
+                        onClick={refreshAllData}
+                        disabled={isRefreshing}
+                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-all border shadow-md ${
+                            isRefreshing 
+                            ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait' 
+                            : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700 hover:shadow-lg transform hover:scale-105'
+                        }`}
+                        title="تحديث البيانات من السجل"
+                    >
+                        {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
+                        {isRefreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
+                    </button>
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left: Summary Stats */}
                     <div className="space-y-4">
@@ -896,8 +977,7 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

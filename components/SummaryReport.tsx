@@ -150,39 +150,81 @@ const SummaryReport: React.FC = () => {
     const getAttendanceStats = () => {
         if (!attendance) return null;
         
-        let startDateStr = '', endDateStr = '';
-        
+        const allRecords = Object.entries(attendance);
+        const totalTrainees = trainees.length || 1;
+
+        // --- CASE 1: FINAL REPORT (Global Reality) ---
+        // In the final report, we sum EVERYTHING present in the database.
+        // This reflects the "Actual Reality" of what has been recorded, regardless of date quirks.
         if (activeReport === 'final') {
-            startDateStr = SESSIONS[0].startDate;
-            endDateStr = SESSIONS[2].endDate;
-        } else if (currentSessionInfo) {
-            startDateStr = currentSessionInfo.startDate;
-            endDateStr = currentSessionInfo.endDate;
-        } else {
-            return null;
+            let finalAbsences = 0;
+            // Track unique days recorded to calculate the denominator correctly
+            const uniqueDates = new Set<string>();
+            
+            allRecords.forEach(([key, status]) => {
+                const dateStr = key.substring(0, 10);
+                uniqueDates.add(dateStr);
+                if (status === 'A') finalAbsences++;
+            });
+
+            const daysCount = uniqueDates.size;
+            // Total Possible Presence = Days Recorded * Total Trainees (Implicit Presence)
+            const totalPossibleChecks = daysCount * totalTrainees;
+            
+            if (totalPossibleChecks === 0) return { sessionAbsences: 0, rate: 0, totalChecks: 0 };
+
+            const actualPresence = totalPossibleChecks - finalAbsences;
+            const rate = Math.round((actualPresence / totalPossibleChecks) * 100);
+
+            return { 
+                sessionAbsences: finalAbsences, 
+                rate, 
+                totalChecks: totalPossibleChecks 
+            };
         }
 
-        const start = new Date(startDateStr);
-        const end = new Date(endDateStr);
+        // --- CASE 2: SPECIFIC SESSIONS (Strict Date Filter) ---
+        // For S1, S2, S3, we ONLY count records that fall strictly within the official dates.
+        const sessionInfo = SESSIONS.find(s => 
+            (activeReport === 's1' && s.id === 1) ||
+            (activeReport === 's2' && s.id === 2) ||
+            (activeReport === 's3' && s.id === 3)
+        );
+
+        if (!sessionInfo) return { sessionAbsences: 0, rate: 0, totalChecks: 0 };
+
+        const start = new Date(sessionInfo.startDate);
+        const end = new Date(sessionInfo.endDate);
+        // Adjust time components to ensure inclusive comparison
+        start.setHours(0,0,0,0);
+        end.setHours(23,59,59,999);
         
         let sessionAbsences = 0;
-        let sessionPresence = 0;
-
-        Object.entries(attendance).forEach(([key, status]) => {
-            // Key: YYYY-MM-DD-ID
+        const uniqueSessionDates = new Set<string>();
+        
+        allRecords.forEach(([key, status]) => {
             const dateStr = key.substring(0, 10);
             const recordDate = new Date(dateStr);
             
             if (recordDate >= start && recordDate <= end) {
-                if (status === 'A') sessionAbsences++;
-                else sessionPresence++;
+                 uniqueSessionDates.add(dateStr);
+                 if (status === 'A') sessionAbsences++;
             }
         });
 
-        const totalChecks = sessionAbsences + sessionPresence;
-        const rate = totalChecks > 0 ? Math.round((sessionPresence / totalChecks) * 100) : 0;
+        const daysCount = uniqueSessionDates.size;
+        const totalPossibleChecks = daysCount * totalTrainees;
 
-        return { sessionAbsences, rate, totalChecks };
+        if (totalPossibleChecks === 0) return { sessionAbsences: 0, rate: 0, totalChecks: 0 };
+
+        const actualPresence = totalPossibleChecks - sessionAbsences;
+        const rate = Math.round((actualPresence / totalPossibleChecks) * 100);
+
+        return { 
+            sessionAbsences, 
+            rate, 
+            totalChecks: totalPossibleChecks 
+        };
     };
 
     const attStats = getAttendanceStats();
