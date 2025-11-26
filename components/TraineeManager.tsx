@@ -155,6 +155,23 @@ const TraineeManager: React.FC = () => {
         alert(reportMsg);
     };
 
+    const downloadTemplate = () => {
+        const BOM = "\uFEFF";
+        const headers = ["الرقم", "اللقب", "الاسم", "تاريخ الميلاد", "مكان الميلاد", "الجنس (ذكر/أنثى)", "المؤسسة", "البلدية", "التخصص (عربية/فرنسية/إنجليزية/بدنية)"];
+        const row1 = ["1", "بن محمد", "أحمد", "1990-01-01", "الأغواط", "ذكر", "مدرسة 1 نوفمبر", "الأغواط", "عربية"];
+        
+        const csvContent = BOM + headers.join(",") + "\n" + row1.join(",");
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'نموذج_قائمة_المتربصين.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -261,6 +278,10 @@ const TraineeManager: React.FC = () => {
                         </div>
                         <div className="flex gap-2 flex-wrap justify-end">
                             <button onClick={handleAutoGrouping} className="btn-secondary flex gap-2 items-center bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-purple-400/30"><ArrowRightLeft className="w-4 h-4"/> توزيع آلي</button>
+                            
+                            {/* Restored Button */}
+                            <button onClick={downloadTemplate} className="btn-secondary flex gap-2 items-center bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors border border-slate-600"><Download className="w-4 h-4"/> نموذج CSV</button>
+                            
                             <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex gap-2 items-center bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Table className="w-4 h-4"/> استيراد</button>
                             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".csv, .txt" />
                             <button onClick={() => setIsAdding(!isAdding)} className="btn-primary flex gap-2 items-center bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Plus className="w-4 h-4"/> إضافة</button>
