@@ -10,7 +10,8 @@ import TraineeManager from './components/TraineeManager';
 import CertificateGenerator from './components/CertificateGenerator';
 import EvaluationManager from './components/EvaluationManager';
 import OnboardingTour from './components/OnboardingTour';
-import SmartHelpTooltip from './components/SmartHelpTooltip'; // Import the new component
+import SmartHelpTooltip from './components/SmartHelpTooltip';
+import TakwinChatbot from './components/TakwinChatbot'; // Import Chatbot
 import { LayoutDashboard, BookOpen, CalendarDays, Table, FileText, Users, Award, Edit3, HelpCircle, Calculator } from 'lucide-react';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
       {/* Global Helper Components */}
       <OnboardingTour isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
       <SmartHelpTooltip />
+      <TakwinChatbot /> {/* Added Chatbot Here */}
 
       {/* Header */}
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 print:hidden">
@@ -91,7 +93,7 @@ function App() {
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === 'trainees' ? 'bg-dzgreen-500/10 text-dzgreen-400 border border-dzgreen-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
                 >
                     <Users className="w-4 h-4" />
-                    <span className="hidden lg:inline">المتكونين</span>
+                    <span className="hidden lg:inline">المتكونون</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('evaluation')}
