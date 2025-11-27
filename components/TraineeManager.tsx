@@ -550,7 +550,7 @@ const TraineeManager: React.FC = () => {
 
                         <div className="mt-8 flex justify-between px-12 font-bold">
                             <div>إمضاء الأستاذ المكون</div>
-                            <div>إمضاء المشرف / المدير</div>
+                            <div>إمضاء المدير البيداغوجي</div>
                         </div>
                     </div>
                 </div>

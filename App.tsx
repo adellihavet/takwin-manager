@@ -10,6 +10,7 @@ import TraineeManager from './components/TraineeManager';
 import CertificateGenerator from './components/CertificateGenerator';
 import EvaluationManager from './components/EvaluationManager';
 import OnboardingTour from './components/OnboardingTour';
+import SmartHelpTooltip from './components/SmartHelpTooltip'; // Import the new component
 import { LayoutDashboard, BookOpen, CalendarDays, Table, FileText, Users, Award, Edit3, HelpCircle, Calculator } from 'lucide-react';
 
 function App() {
@@ -28,8 +29,9 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 text-right selection:bg-dzgreen-500 selection:text-white" dir="rtl">
       
-      {/* Tour Modal */}
+      {/* Global Helper Components */}
       <OnboardingTour isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
+      <SmartHelpTooltip />
 
       {/* Header */}
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 print:hidden">

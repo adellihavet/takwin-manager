@@ -808,7 +808,7 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
                                                  </table>
                                                  
                                                  <div className="mt-8 text-left pl-8 font-bold text-lg">
-                                                     رئيس المركز
+                                                     المدير البيداغوجي
                                                  </div>
                                             </div>
                                         );

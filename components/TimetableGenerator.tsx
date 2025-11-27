@@ -735,8 +735,8 @@ const TimetableGenerator: React.FC = () => {
                                 </tbody>
                             </table>
                             <div className="mt-8 flex justify-between text-sm font-bold px-12">
-                                <div>إمضاء الأستاذ المنسق</div>
-                                <div>إمضاء مدير التكوين</div>
+                                <div></div>
+                                <div>إمضاء المدير البيداغوجي</div>
                             </div>
                         </div>
                     );
@@ -808,8 +808,8 @@ const TimetableGenerator: React.FC = () => {
                                 </tbody>
                             </table>
                             <div className="mt-8 flex justify-between text-sm font-bold px-12">
-                                <div>إمضاء الأستاذ المكون</div>
-                                <div>إمضاء مدير التكوين</div>
+                                <div></div>
+                                <div>إمضاء المدير البيداغوجي</div>
                             </div>
                         </div>
                     );
