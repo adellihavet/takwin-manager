@@ -128,6 +128,41 @@ export interface Trainee {
 // Key: "YYYY-MM-DD-TraineeID", Value: 'P' (Present) | 'A' (Absent)
 export type AttendanceRecord = Record<string, 'P' | 'A'>;
 
+// New Interface for Grades
+export interface GradeRecord {
+  s1?: number;
+  s2?: number;
+  s3?: number;
+  finalExam?: number;
+  report?: number;
+}
+
+// Map TraineeID -> GradeRecord
+export type EvaluationDatabase = Record<string, GradeRecord>;
+
+// --- EXAM MANAGEMENT TYPES ---
+export interface ExamSlot {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  moduleId: number;
+}
+
+export interface ExamRoom {
+  id: number; // Room Number
+  specialtyId: string;
+  trainees: Trainee[];
+  capacity: number; // Fixed to 20 usually
+}
+
+export interface ProctorAssignment {
+  roomId: number;
+  examSlotId: string;
+  proctor1: string; // Name
+  proctor2: string; // Name
+}
+
 export interface ProjectDatabase {
   institutionConfig?: InstitutionConfig;
   specialties: Specialty[];
@@ -136,7 +171,11 @@ export interface ProjectDatabase {
   assignments?: TrainerAssignment[]; 
   reports?: ReportConfig; 
   trainees?: Trainee[]; 
-  attendance?: AttendanceRecord; // Added attendance data
+  attendance?: AttendanceRecord; 
+  evaluations?: EvaluationDatabase;
+  examSchedule?: ExamSlot[]; 
+  examProctors?: ProctorAssignment[]; 
+  externalProctors?: string[]; // Added for extra exam staff
   version: string;
   savedAt: string;
 }

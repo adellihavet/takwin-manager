@@ -8,11 +8,12 @@ import TimetableEditor from './components/TimetableEditor';
 import SummaryReport from './components/SummaryReport';
 import TraineeManager from './components/TraineeManager';
 import CertificateGenerator from './components/CertificateGenerator';
+import EvaluationManager from './components/EvaluationManager';
 import OnboardingTour from './components/OnboardingTour';
-import { LayoutDashboard, BookOpen, CalendarDays, Table, FileText, Users, Award, Edit3, HelpCircle } from 'lucide-react';
+import { LayoutDashboard, BookOpen, CalendarDays, Table, FileText, Users, Award, Edit3, HelpCircle, Calculator } from 'lucide-react';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'schedule' | 'timetable' | 'editor' | 'summary' | 'trainees' | 'certificates'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'schedule' | 'timetable' | 'editor' | 'summary' | 'trainees' | 'evaluation' | 'certificates'>('dashboard');
   const [isTourOpen, setIsTourOpen] = useState(false);
 
   useEffect(() => {
@@ -53,7 +54,7 @@ function App() {
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-dzgreen-500/10 text-dzgreen-400 border border-dzgreen-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
                 >
                     <LayoutDashboard className="w-4 h-4" />
-                    <span className="hidden lg:inline">لوحة القيادة</span>
+                    <span className="hidden lg:inline">القيادة</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('curriculum')}
@@ -88,7 +89,14 @@ function App() {
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === 'trainees' ? 'bg-dzgreen-500/10 text-dzgreen-400 border border-dzgreen-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
                 >
                     <Users className="w-4 h-4" />
-                    <span className="hidden lg:inline">المتكونون</span>
+                    <span className="hidden lg:inline">المتكونين</span>
+                </button>
+                <button 
+                    onClick={() => setActiveTab('evaluation')}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${activeTab === 'evaluation' ? 'bg-dzgreen-500/10 text-dzgreen-400 border border-dzgreen-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                >
+                    <Calculator className="w-4 h-4" />
+                    <span className="hidden lg:inline">التقويم</span>
                 </button>
                 <button 
                     onClick={() => setActiveTab('certificates')}
@@ -128,12 +136,13 @@ function App() {
         {activeTab === 'editor' && <TimetableEditor />}
         {activeTab === 'summary' && <SummaryReport />}
         {activeTab === 'trainees' && <TraineeManager />}
+        {activeTab === 'evaluation' && <EvaluationManager />}
         {activeTab === 'certificates' && <CertificateGenerator />}
       </main>
       
       <footer className="border-t border-slate-800 mt-12 py-8 bg-slate-950 print:hidden">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-slate-500">
-          <p>© 2025 منصة تسيير التكوين التحضيري للأساتذة (كمال دليحة).</p>
+          <p>© 2025 منصة تسيير مركز التكوين التحضيري للأساتذة (كمال دليحة).</p>
         </div>
       </footer>
     </div>
