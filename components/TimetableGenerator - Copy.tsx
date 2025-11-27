@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SESSIONS, SPECIALTIES as DEFAULT_SPECIALTIES, MODULES, CORRECTED_DISTRIBUTION } from '../constants';
 import { getWorkingDays, formatDate } from '../utils';
-import { Specialty, GroupSchedule, TrainerConfig, TrainerAssignment, Module } from '../types';
+import { Specialty, GroupSchedule, TrainerConfig, TrainerAssignment } from '../types';
 import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText } from 'lucide-react';
 
 const TimetableGenerator: React.FC = () => {
@@ -232,7 +232,7 @@ const TimetableGenerator: React.FC = () => {
             };
 
             // Distribute groups to trainers
-            const availableModules: Module[] = [...MODULES];
+            const availableModules = [...MODULES];
             if (surplusHours > 0) availableModules.push({ id: REVISION_MOD_ID, title: 'Rev', shortTitle: 'Rev', totalHours: 0 });
 
             availableModules.forEach(m => {

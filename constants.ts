@@ -38,12 +38,13 @@ export const SESSIONS: SessionInfo[] = [
   },
 ];
 
-export const MODULES: Module[] = [
+export const MODULES: (Module & { coefficient: number })[] = [
   { 
     id: 1, 
     title: 'تعليمية مادة التخصص وطرائق التدريس', 
     shortTitle: 'التعليمية',
     totalHours: 40,
+    coefficient: 2,
     description: 'هيكلة وبناء المقطع التعلمي، طرائق التدريس الحديثة، الوسائل التعليمية، استغلال السندات، والتقويم التربوي الفعال.'
   },
   { 
@@ -51,6 +52,7 @@ export const MODULES: Module[] = [
     title: 'النظام التربوي والمناهج التعليمية', 
     shortTitle: 'النظام التربوي',
     totalHours: 20,
+    coefficient: 1,
     description: 'مفاهيم النظام التربوي، أنواع المناهج، أسس بناء المنهاج، وتحليل مكونات المنهاج الدراسي.'
   },
   { 
@@ -58,6 +60,7 @@ export const MODULES: Module[] = [
     title: 'علوم التربية وعلم النفس', 
     shortTitle: 'علم النفس',
     totalHours: 20,
+    coefficient: 1,
     description: 'علم النفس العام، العمليات العقلية، المراحل العمرية (الطفولة والمراهقة)، سيكولوجية الفروق الفردية، والمشكلات النفسية والتربوية.'
   },
   { 
@@ -65,6 +68,7 @@ export const MODULES: Module[] = [
     title: 'التشريع المدرسي', 
     shortTitle: 'التشريع',
     totalHours: 20,
+    coefficient: 1,
     description: 'مفهوم الموظف، الحقوق والواجبات، الأخطاء المهنية، المجالس، الحياة المهنية، النصوص القانونية وعلاقتها بالمناهج.'
   },
   { 
@@ -72,6 +76,7 @@ export const MODULES: Module[] = [
     title: 'ميثاق أخلاقيات المهنة', 
     shortTitle: 'أخلاقيات المهنة',
     totalHours: 10,
+    coefficient: 1,
     description: 'مبادئ وقواعد الميثاق، أدبيات مهنة المربي، الالتزام المهني، وعلاقة الميثاق باستقرار الحياة المدرسية.'
   },
   { 
@@ -79,6 +84,7 @@ export const MODULES: Module[] = [
     title: 'الوساطة المدرسية', 
     shortTitle: 'الوساطة',
     totalHours: 10,
+    coefficient: 1,
     description: 'مفهوم الوساطة، دور الوسيط التربوي، أساليب الوقاية من النزاعات، وتقنيات الحوار التربوي.'
   },
   { 
@@ -86,6 +92,7 @@ export const MODULES: Module[] = [
     title: 'تقنيات تسيير القسم', 
     shortTitle: 'تسيير القسم',
     totalHours: 10,
+    coefficient: 1,
     description: 'إدارة الصف (1 و 2)، التفاعل الصفي، القيادة التربوية، وتمثيل ومحاكاة الممارسات التعليمية.'
   },
   { 
@@ -93,6 +100,7 @@ export const MODULES: Module[] = [
     title: 'التقويم والمعالجة البيداغوجية', 
     shortTitle: 'التقويم',
     totalHours: 25,
+    coefficient: 2,
     description: 'مفهوم التقويم وأنواعه، بناء الاختبارات، تحليل النتائج، المعالجة البيداغوجية، والمخططات السنوية للتقويم.'
   },
   { 
@@ -100,6 +108,7 @@ export const MODULES: Module[] = [
     title: 'هندسة التكوين', 
     shortTitle: 'هندسة التكوين',
     totalHours: 10,
+    coefficient: 1,
     description: 'تحليل الحاجات التكوينية، تخطيط العمليات التكوينية، وآليات التطوير المهني.'
   },
   { 
@@ -107,6 +116,7 @@ export const MODULES: Module[] = [
     title: 'الإعلام الآلي وتكنولوجيا التعليم', 
     shortTitle: 'تكنولوجيا التعليم',
     totalHours: 25,
+    coefficient: 1,
     description: 'إدماج التكنولوجيات الحديثة، الرقمنة، واستخدام البرمجيات المكتبية (Word, Excel, PPT) في التعليم.'
   },
 ];
