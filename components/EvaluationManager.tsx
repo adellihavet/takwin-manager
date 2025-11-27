@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Upload, FileSpreadsheet, Printer, Award, Calculator, Settings, BookOpen } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, Printer, Award, Calculator, Settings, BookOpen, UserCheck, Calendar } from 'lucide-react';
 import { Trainee, Specialty, EvaluationDatabase, InstitutionConfig } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, MODULES } from '../constants';
 import ExamManager from './ExamManager';
@@ -16,6 +16,9 @@ const EvaluationManager: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'s1' | 's2' | 's3' | 'exams' | 'final'>('s1');
     const [selectedSpec, setSelectedSpec] = useState<string>('all');
     const [selectedGroup, setSelectedGroup] = useState<number>(0); // 0 = all
+    
+    // PV Variables
+    const [deliberationDate, setDeliberationDate] = useState<string>('');
     const [committeeMembers, setCommitteeMembers] = useState({
         president: '',
         director: '',
@@ -37,6 +40,11 @@ const EvaluationManager: React.FC = () => {
 
         const savedInst = localStorage.getItem('takwin_institution_db');
         if (savedInst) try { setInstitution(JSON.parse(savedInst)); } catch(e) {}
+        
+        // Initialize committee director from institution if available
+        const inst = JSON.parse(localStorage.getItem('takwin_institution_db') || '{}');
+        if (inst.director) setCommitteeMembers(prev => ({ ...prev, director: inst.director }));
+
     }, []);
 
     const saveGrades = (newGrades: EvaluationDatabase) => {
@@ -181,7 +189,14 @@ const EvaluationManager: React.FC = () => {
     // --- PRINT HANDLERS ---
     const handlePrintPV = () => {
         const printContent = document.getElementById('deliberation-pv');
-        const printSection = document.getElementById('print-section');
+        
+        // Ensure print section exists
+        let printSection = document.getElementById('print-section');
+        if (!printSection) {
+            printSection = document.createElement('div');
+            printSection.id = 'print-section';
+            document.body.appendChild(printSection);
+        }
         
         if (printContent && printSection) {
             // Clear previous content
@@ -190,13 +205,16 @@ const EvaluationManager: React.FC = () => {
             // Clone the node deeply
             const contentClone = printContent.cloneNode(true) as HTMLElement;
             
+            // Remove hidden classes if any on the parent container
+            contentClone.classList.remove('hidden');
+            
             // Append to print section
             printSection.appendChild(contentClone);
             
             // Wait for DOM update then print
             setTimeout(() => {
                 window.print();
-            }, 100);
+            }, 300);
         } else {
             alert("خطأ: لم يتم العثور على محتوى المحضر.");
         }
@@ -318,14 +336,60 @@ const EvaluationManager: React.FC = () => {
 
                         {activeTab === 'final' && (
                             <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 animate-slideUp">
-                                <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                                    <Printer className="text-amber-400" />
-                                    طباعة الوثائق الرسمية
+                                <h3 className="text-white font-bold mb-4 flex items-center gap-2 border-b border-slate-700 pb-2">
+                                    <Settings className="text-amber-400 w-5 h-5" />
+                                    إعدادات المحضر (للطباعة)
                                 </h3>
-                                <div className="space-y-3">
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs text-slate-400 font-bold block">تاريخ المداولات:</label>
+                                        <input 
+                                            type="text" placeholder="مثال: 25 جويلية 2026" 
+                                            className="w-full bg-slate-950 border border-slate-600 rounded p-2 text-white text-sm"
+                                            value={deliberationDate}
+                                            onChange={e => setDeliberationDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs text-slate-400 font-bold block">رئيس اللجنة (ممثل السلطة):</label>
+                                        <input 
+                                            type="text" placeholder="الاسم واللقب" 
+                                            className="w-full bg-slate-950 border border-slate-600 rounded p-2 text-white text-sm"
+                                            value={committeeMembers.president}
+                                            onChange={e => setCommitteeMembers({...committeeMembers, president: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs text-slate-400 font-bold block">عضو 1 (المدير البيداغوجي):</label>
+                                        <input 
+                                            type="text" placeholder="الاسم واللقب" 
+                                            className="w-full bg-slate-950 border border-slate-600 rounded p-2 text-white text-sm"
+                                            value={committeeMembers.director}
+                                            onChange={e => setCommitteeMembers({...committeeMembers, director: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs text-slate-400 font-bold block">عضو 2 (ممثل المكونين):</label>
+                                        <input 
+                                            type="text" placeholder="الاسم واللقب" 
+                                            className="w-full bg-slate-950 border border-slate-600 rounded p-2 text-white text-sm"
+                                            value={committeeMembers.trainer1}
+                                            onChange={e => setCommitteeMembers({...committeeMembers, trainer1: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs text-slate-400 font-bold block">عضو 3 (ممثل المكونين):</label>
+                                        <input 
+                                            type="text" placeholder="الاسم واللقب" 
+                                            className="w-full bg-slate-950 border border-slate-600 rounded p-2 text-white text-sm"
+                                            value={committeeMembers.trainer2}
+                                            onChange={e => setCommitteeMembers({...committeeMembers, trainer2: e.target.value})}
+                                        />
+                                    </div>
+
                                     <button 
                                         onClick={handlePrintPV}
-                                        className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white py-3 rounded-lg font-bold transition-colors"
+                                        className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white py-3 rounded-lg font-bold transition-colors mt-4"
                                     >
                                         <Award className="w-4 h-4" />
                                         طباعة محضر المداولات (PV)
@@ -433,63 +497,63 @@ const EvaluationManager: React.FC = () => {
 
             {/* HIDDEN PRINT TEMPLATES - Always Rendered but hidden */}
             <div className="hidden">
-                {/* 2. DELIBERATION PV (Same as before) */}
+                {/* 2. DELIBERATION PV (Revised Layout) */}
                 <div id="deliberation-pv" className="p-8 bg-white text-black font-serif text-justify" style={{ direction: 'rtl' }}>
                     
-                    {/* Header */}
-                    <div className="text-center mb-6">
+                    {/* Header: Reduced bottom margin */}
+                    <div className="text-center mb-4">
                         <h3 className="font-bold text-lg">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
                         <h3 className="font-bold text-lg">وزارة التربية الوطنية</h3>
-                        <div className="flex justify-between mt-2 text-sm font-bold px-0 w-full">
+                        <div className="flex justify-between mt-2 text-sm font-bold px-0 w-full border-t border-gray-300 pt-2">
                             <span>مديرية التربية لولاية: {institution.wilaya}</span>
                             <span>مركز إجراء التكوين: {institution.center}</span>
                         </div>
                     </div>
 
-                    {/* Title */}
-                    <div className="text-center mb-6">
-                        <h1 className="text-2xl font-black underline decoration-double">
+                    {/* Title: Reduced margins */}
+                    <div className="text-center mb-4 border-2 border-black p-2 rounded">
+                        <h1 className="text-xl font-black underline decoration-double">
                             محضر لجنة نهاية التكوين البيداغوجي التحضيري أثناء التربص التجريبي
                         </h1>
-                        <h2 className="text-xl font-bold mt-2">2025 - 2026 لرتبة: أستاذ التعليم الابتدائي</h2>
+                        <h2 className="text-lg font-bold mt-1">2025 - 2026 لرتبة: أستاذ التعليم الابتدائي</h2>
                     </div>
 
-                    {/* Body Text */}
-                    <div className="leading-loose text-lg mb-4">
+                    {/* Body Text: Reduced Line Height */}
+                    <div className="leading-relaxed text-base mb-4">
                         <p>
-                            في العام <span className="font-bold">2026</span> وفي <span className="font-bold">.......................</span> من شهر <span className="font-bold">جويلية</span> على الساعة <span className="font-bold">..............</span> انعقدت بمقر <span className="font-bold">{institution.center}</span> بولاية <span className="font-bold">{institution.wilaya}</span> لجنة مداولات النتائج النهائية للتكوين البيداغوجي التحضيري أثناء التربص التجريبي للالتحاق بسلك أساتذة التعليم الابتدائي، رتبة: أستاذ التعليم الابتدائي، وذلك طبقاً للقرار الوزاري رقم: 250 المؤرخ في 24 أوت 2015 الذي يحدد كيفيات تنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي لموظفي التعليم ومدته وكذا محتوى برامجه.
+                            في العام <span className="font-bold">2026</span> وفي <span className="font-bold border-b border-dotted border-black px-2">{deliberationDate || '.......................'}</span> على الساعة <span className="font-bold">..............</span> انعقدت بمقر <span className="font-bold">{institution.center}</span> بولاية <span className="font-bold">{institution.wilaya}</span> لجنة مداولات النتائج النهائية للتكوين البيداغوجي التحضيري أثناء التربص التجريبي للالتحاق بسلك أساتذة التعليم الابتدائي، رتبة: أستاذ التعليم الابتدائي، وذلك طبقاً للقرار الوزاري رقم: 250 المؤرخ في 24 أوت 2015 الذي يحدد كيفيات تنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي لموظفي التعليم ومدته وكذا محتوى برامجه.
                         </p>
                     </div>
 
-                    {/* Members */}
-                    <div className="mb-6">
-                        <p className="font-bold mb-2">حضر الأعضاء الآتية أسماؤهم:</p>
-                        <ul className="space-y-2 list-none pr-4">
-                            <li className="flex gap-2">- السيد(ة): <span className="border-b border-dotted border-black min-w-[200px]">{committeeMembers.president}</span> ممثل السلطة التي لها صلاحية التعيين (رئيساً)</li>
-                            <li className="flex gap-2">- السيد(ة): <span className="border-b border-dotted border-black min-w-[200px]">{committeeMembers.director}</span> المدير البيداغوجي ممثل المؤسسة العمومية للتكوين (عضواً)</li>
-                            <li className="flex gap-2">- السيد(ة): <span className="border-b border-dotted border-black min-w-[200px]">{committeeMembers.trainer1}</span> ممثلاً عن المكونين التابعين لمركز إجراء التكوين (عضواً)</li>
-                            <li className="flex gap-2">- السيد(ة): <span className="border-b border-dotted border-black min-w-[200px]">{committeeMembers.trainer2}</span> ممثلاً عن المكونين التابعين لمركز إجراء التكوين (عضواً)</li>
+                    {/* Members: Compact List */}
+                    <div className="mb-4 bg-gray-50 p-2 border border-gray-200 rounded">
+                        <p className="font-bold mb-2 underline">حضر الأعضاء الآتية أسماؤهم:</p>
+                        <ul className="space-y-1 list-none pr-2 text-sm">
+                            <li className="flex gap-2">- السيد(ة): <span className="font-bold border-b border-dotted border-black min-w-[200px]">{committeeMembers.president}</span> ممثل السلطة التي لها صلاحية التعيين (رئيساً)</li>
+                            <li className="flex gap-2">- السيد(ة): <span className="font-bold border-b border-dotted border-black min-w-[200px]">{committeeMembers.director}</span> المدير البيداغوجي (عضواً)</li>
+                            <li className="flex gap-2">- السيد(ة): <span className="font-bold border-b border-dotted border-black min-w-[200px]">{committeeMembers.trainer1}</span> ممثلاً عن المكونين (عضواً)</li>
+                            <li className="flex gap-2">- السيد(ة): <span className="font-bold border-b border-dotted border-black min-w-[200px]">{committeeMembers.trainer2}</span> ممثلاً عن المكونين (عضواً)</li>
                         </ul>
                     </div>
 
                     {/* Committee Decision Intro */}
-                    <div className="mb-4">
-                        <p className="font-bold underline mb-2">إن اللجنة وبعد:</p>
-                        <ol className="list-decimal list-inside pr-4 space-y-1">
+                    <div className="mb-2 text-sm">
+                        <p className="font-bold underline mb-1">إن اللجنة وبعد:</p>
+                        <ol className="list-decimal list-inside pr-4">
                             <li>الاطلاع على الكشف العام لنتائج نهاية التكوين البيداغوجي التحضيري دورة 2025/2026.</li>
                             <li>دراسة العلامات والمعدلات التي تحصل عليها المتكونون خلال دورة التكوين.</li>
                             <li>حصيلة التكوين البيداغوجي التحضيري:</li>
                         </ol>
                     </div>
 
-                    {/* Stats Table (Page 1 OCR) */}
-                    <table className="w-full border border-black text-center text-sm mb-6">
+                    {/* Stats Table (Page 1 OCR) - Reduced Padding */}
+                    <table className="w-full border border-black text-center text-xs mb-4">
                         <thead className="bg-gray-100">
                             <tr>
                                 <th className="border border-black p-1">المقاييس</th>
-                                <th className="border border-black p-1">عدد المتكونين</th>
-                                <th className="border border-black p-1">عدد الحاضرين</th>
-                                <th className="border border-black p-1">الحجم الساعي المنجز</th>
+                                <th className="border border-black p-1 w-24">عدد المتكونين</th>
+                                <th className="border border-black p-1 w-24">عدد الحاضرين</th>
+                                <th className="border border-black p-1 w-32">الحجم الساعي المنجز</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -510,15 +574,15 @@ const EvaluationManager: React.FC = () => {
                         </tbody>
                     </table>
 
-                    {/* Page Break for print */}
-                    <div className="page-break"></div>
+                    {/* FORCE PAGE BREAK - Correctly styled */}
+                    <div className="page-break" style={{ pageBreakAfter: 'always', height: 0, margin: 0 }}></div>
 
                     {/* Page 2 Content */}
-                    <div className="mt-8">
+                    <div className="mt-8 pt-4">
                          <p className="mb-4 text-lg leading-relaxed">
-                            تصادق بإجماع أعضائها على قبول قائمة الناجحين النهائية الذين تحصلوا على معدل يساوي 10 على 20 أو يفوق، وعددهم <span className="font-bold text-xl px-2">{getSuccessStats().admitted}</span> ناجحاً.
+                            تصادق بإجماع أعضائها على قبول قائمة الناجحين النهائية الذين تحصلوا على معدل يساوي 10 على 20 أو يفوق، وعددهم <span className="font-bold text-xl px-2 border-2 border-black rounded bg-gray-100">{getSuccessStats().admitted}</span> ناجحاً.
                          </p>
-                         <p className="font-bold text-lg mb-4">وتم إعداد قائمة المتكونين الناجحين حسب درجة الاستحقاق كالآتي:</p>
+                         <p className="font-bold text-lg mb-4 underline">وتم إعداد قائمة المتكونين الناجحين حسب درجة الاستحقاق كالآتي:</p>
                          
                          {/* List of Successful Candidates */}
                          <table className="w-full border border-black text-center text-sm mb-8">
@@ -526,10 +590,10 @@ const EvaluationManager: React.FC = () => {
                                  <tr>
                                      <th className="border border-black p-2 w-12">ر.ت</th>
                                      <th className="border border-black p-2">اللقب والاسم</th>
-                                     <th className="border border-black p-2">تاريخ الميلاد</th>
+                                     <th className="border border-black p-2 w-32">تاريخ الميلاد</th>
                                      <th className="border border-black p-2">التخصص</th>
-                                     <th className="border border-black p-2">المعدل العام</th>
-                                     <th className="border border-black p-2">الملاحظة</th>
+                                     <th className="border border-black p-2 w-24">المعدل العام</th>
+                                     <th className="border border-black p-2 w-24">الملاحظة</th>
                                  </tr>
                              </thead>
                              <tbody>
@@ -550,13 +614,18 @@ const EvaluationManager: React.FC = () => {
                              </tbody>
                          </table>
 
-                         <div className="mb-12">
+                         <div className="mb-12 text-base">
                              <p>وبعد استنفاذ جدول الأعمال رفعت الجلسة في يومها على الواحدة زوالاً.</p>
                              <p>حرر هذا المحضر لإثبات ما ذكر أعلاه.</p>
                          </div>
 
-                         <div className="text-left pl-12">
-                             <p className="font-bold text-xl underline">مدير العملية</p>
+                         <div className="flex justify-between px-12 text-lg font-bold">
+                             <div className="text-center">
+                                 <p className="mb-12 underline">أعضاء اللجنة</p>
+                             </div>
+                             <div className="text-center">
+                                 <p className="mb-12 underline">رئيس اللجنة (مدير التربية)</p>
+                             </div>
                          </div>
                     </div>
                 </div>
