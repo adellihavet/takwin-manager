@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, PieChart as PieIcon, BarChart3, Map, ClipboardX, AlertTriangle, RefreshCcw, Loader2 } from 'lucide-react';
+import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2 } from 'lucide-react';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS, MODULES } from '../constants';
 import { Specialty, TrainerConfig, ProjectDatabase, InstitutionConfig, Trainee, AttendanceRecord } from '../types';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { downloadJSON, readJSONFile } from '../utils';
 
 const Dashboard: React.FC = () => {
@@ -41,7 +40,6 @@ const Dashboard: React.FC = () => {
     let loadedTraineesCount = 0;
     let loadedAbsenceCount = 0;
 
-    // Direct synchronous update to ensure state changes immediately
     try {
         const savedData = localStorage.getItem('takwin_specialties_db');
         if (savedData) {
@@ -75,11 +73,9 @@ const Dashboard: React.FC = () => {
         if (savedAtt) {
             const parsed = JSON.parse(savedAtt);
             setAttendance(parsed); 
-            // Count exact absences 'A'
             loadedAbsenceCount = Object.values(parsed).filter(x => x === 'A').length;
         }
 
-        // Small delay just for UI feedback
         setTimeout(() => {
             setIsRefreshing(false);
             alert(`تم تحديث البيانات!\n\n- عدد المتربصين: ${loadedTraineesCount}\n- عدد الغيابات المسجلة: ${loadedAbsenceCount}`);
@@ -94,7 +90,6 @@ const Dashboard: React.FC = () => {
 
   // Load from local storage on mount
   useEffect(() => {
-    // We call the internal logic without alert on mount
     const savedData = localStorage.getItem('takwin_specialties_db');
     if (savedData) try { setSpecialties(JSON.parse(savedData)); setEditData(JSON.parse(savedData)); } catch(e){}
     
@@ -185,8 +180,7 @@ const Dashboard: React.FC = () => {
           localStorage.setItem('takwin_attendance_db', JSON.stringify(db.attendance));
       }
 
-      alert('تم استيراد قاعدة البيانات وتحديث جميع الإعدادات (بما في ذلك المتكونين والغياب) بنجاح!');
-      // Force reload data into state
+      alert('تم استيراد قاعدة البيانات وتحديث جميع الإعدادات بنجاح!');
       const savedTrainees = localStorage.getItem('takwin_trainees_db');
       if (savedTrainees) setTrainees(JSON.parse(savedTrainees));
       
@@ -277,116 +271,6 @@ const Dashboard: React.FC = () => {
       }));
   };
 
-  // --- ANALYTICS LOGIC ---
-  const calculateAnalytics = () => {
-      // Demographics
-      let male = 0, female = 0;
-      const currentYear = new Date().getFullYear();
-      const ageGroups = { '20-29': 0, '30-39': 0, '40-49': 0, '+50': 0 };
-      const munCounts: Record<string, number> = {};
-
-      if (trainees && trainees.length > 0) {
-        trainees.forEach(t => {
-            // Gender
-            if (t.gender === 'M') male++; else female++;
-            
-            // Age
-            if (t.dob) {
-                let year = NaN;
-                const dobStr = t.dob.toString().trim();
-                if (dobStr.includes('-')) year = parseInt(dobStr.split('-')[0]);
-                else if (dobStr.includes('/')) {
-                    const parts = dobStr.split('/');
-                    if (parts.length === 3) year = parseInt(parts[2]);
-                } else if (dobStr.length === 4) year = parseInt(dobStr);
-
-                if (!isNaN(year) && year > 1900 && year <= currentYear) {
-                    const age = currentYear - year;
-                    if (age >= 20 && age < 30) ageGroups['20-29']++;
-                    else if (age >= 30 && age < 40) ageGroups['30-39']++;
-                    else if (age >= 40 && age < 50) ageGroups['40-49']++;
-                    else if (age >= 50) ageGroups['+50']++;
-                }
-            }
-
-            // Geo
-            let m = 'غير محدد';
-            if (t.municipality && t.municipality.trim().length > 0) m = t.municipality.trim();
-            munCounts[m] = (munCounts[m] || 0) + 1;
-        });
-      }
-
-      const genderData = [{ name: 'ذكور', value: male, color: '#3b82f6' }, { name: 'إناث', value: female, color: '#ec4899' }];
-      const ageData = Object.entries(ageGroups).map(([key, val]) => ({ name: key, value: val }));
-      const geoData = Object.entries(munCounts).sort(([,a], [,b]) => b - a).slice(0, 7).map(([key, val]) => ({ name: key, value: val }));
-
-      // Attendance Analytics
-      // 1. Identify distinct dates that have ANY record
-      const uniqueDays = new Set<string>();
-      
-      let totalAbsences = 0;
-      const absenceBySpecialty: Record<string, number> = {};
-      const traineeAbsenceCount: Record<string, number> = {};
-
-      if (attendance) {
-        Object.entries(attendance).forEach(([key, status]) => {
-            // Key: YYYY-MM-DD-TRAINEE_ID
-            const dateStr = key.substring(0, 10);
-            uniqueDays.add(dateStr);
-
-            if (status === 'A') {
-                totalAbsences++;
-                const tId = key.length > 11 ? key.substring(11) : '';
-                
-                if (tId) {
-                   traineeAbsenceCount[tId] = (traineeAbsenceCount[tId] || 0) + 1;
-
-                   const t = trainees.find(tr => tr.id === tId);
-                   if (t) {
-                       absenceBySpecialty[t.specialtyId] = (absenceBySpecialty[t.specialtyId] || 0) + 1;
-                   }
-                }
-            }
-        });
-      }
-
-      // Calculation:
-      // Total Possible Presence = (Number of Days with records) * (Total Number of Trainees)
-      // This assumes if a day has records, ALL trainees were expected to be there (Implicit Presence)
-      const daysCount = uniqueDays.size || 0;
-      const traineesCount = trainees.length || 0;
-      
-      // Prevent division by zero if no data
-      let attendanceRate = 0;
-      if (daysCount > 0 && traineesCount > 0) {
-          const totalPossibleAttendance = daysCount * traineesCount;
-          const actualPresence = totalPossibleAttendance - totalAbsences;
-          attendanceRate = Math.round((actualPresence / totalPossibleAttendance) * 100);
-      } else {
-          // If no days recorded yet, assume 100% or 0% depending on preference. usually 0 or -
-          attendanceRate = 0;
-      }
-      
-      const absenceChartData = specialties.map(s => ({
-          name: s.name,
-          value: absenceBySpecialty[s.id] || 0,
-          color: s.color.includes('blue') ? '#3b82f6' : s.color.includes('indigo') ? '#6366f1' : s.color.includes('purple') ? '#a855f7' : '#10b981'
-      }));
-
-      // Top Absentees
-      const topAbsentees = Object.entries(traineeAbsenceCount)
-          .sort(([,a], [,b]) => b - a)
-          .slice(0, 5)
-          .map(([id, count]) => {
-              const t = trainees.find(tr => tr.id === id);
-              return { name: t ? `${t.surname} ${t.name}` : `متربص غير موجود (${id})`, count, specialty: t ? specialties.find(s=>s.id === t.specialtyId)?.name : '' };
-          });
-
-      return { genderData, ageData, geoData, attendanceRate, totalAbsences, absenceChartData, topAbsentees };
-  };
-
-  const analytics = calculateAnalytics();
-  const COLORS = ['#3b82f6', '#6366f1', '#a855f7', '#10b981'];
   const totalTrainees = specialties.reduce((acc, curr) => acc + curr.count, 0);
   const totalGroups = specialties.reduce((acc, curr) => acc + curr.groups, 0);
   const totalHours = SESSIONS.reduce((acc, curr) => acc + curr.hoursTotal, 0);
@@ -656,32 +540,6 @@ const Dashboard: React.FC = () => {
                     </div>
                     ))}
                 </div>
-                
-                <div className="h-64">
-                    <h4 className="text-center text-xs text-slate-500 mb-2">نسبة التوزيع حسب التخصص</h4>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie
-                            data={(isEditing ? editData : specialties) as any[]}
-                            dataKey="count"
-                            nameKey="name"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
-                            paddingAngle={5}
-                            stroke="none"
-                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
-                            >
-                            {(isEditing ? editData : specialties).map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                            </Pie>
-                            <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#f8fafc', borderRadius: '8px' }} />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
-                </div>
             </div>
         </div>
 
@@ -755,7 +613,6 @@ const Dashboard: React.FC = () => {
 
                             <div className="space-y-2">
                                 {isDidactics ? (
-                                    // DIDACTICS: Per Specialty
                                     specialties.map(spec => {
                                         const count = config.specialtyCounts?.[spec.id] || 1;
                                         return (
@@ -776,7 +633,6 @@ const Dashboard: React.FC = () => {
                                                         </div>
                                                     )}
                                                 </div>
-                                                {/* Inputs for each trainer in this specialty */}
                                                 <div className="grid grid-cols-1 gap-2 pl-2 border-r-2 border-slate-700 mr-1">
                                                     {Array.from({ length: count }).map((_, idx) => {
                                                         const key = `${spec.id}-${idx + 1}`;
@@ -802,7 +658,6 @@ const Dashboard: React.FC = () => {
                                         );
                                     })
                                 ) : (
-                                    // GENERAL: Simple List based on generalCount
                                     <div className="grid grid-cols-1 gap-2">
                                         {Array.from({ length: config.generalCount || 1 }).map((_, idx) => {
                                             const key = (idx + 1).toString();
@@ -833,161 +688,6 @@ const Dashboard: React.FC = () => {
                 })}
             </div>
         </div>
-      </div>
-
-      {/* 5. ANALYTICS SECTION (FULL WIDTH) */}
-      <div className="space-y-8">
-            {/* Demographics */}
-            <div className="bg-slate-900/80 backdrop-blur p-8 rounded-2xl shadow-lg border border-slate-800/60 mt-8 animate-slideUp">
-                <h3 className="text-xl font-bold text-white mb-8 border-b border-slate-800 pb-4 flex items-center gap-2">
-                    <BarChart3 className="text-blue-400 w-6 h-6" />
-                    التحليل الديموغرافي والجغرافي للمتكونين
-                </h3>
-                {trainees.length === 0 ? (
-                    <div className="text-center text-slate-500 py-12">
-                        لا توجد بيانات للمتكونين لعرض الإحصائيات. يرجى إضافة أو استيراد قائمة المتربصين.
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {/* Gender Chart */}
-                        <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                            <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
-                                <Users className="w-4 h-4 text-pink-400" /> التوزيع حسب الجنس
-                            </h4>
-                            <div className="flex-1">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={analytics.genderData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} stroke="none" label>
-                                            {analytics.genderData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                                        </Pie>
-                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                        <Legend verticalAlign="bottom" height={36} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                        {/* Age Chart */}
-                        <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                            <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
-                                <Calendar className="w-4 h-4 text-purple-400" /> الفئات العمرية
-                            </h4>
-                            <div className="flex-1">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={analytics.ageData} margin={{top: 20, right: 20, left: 0, bottom: 5}}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                        <XAxis dataKey="name" tick={{fill: '#cbd5e1', fontSize: 12}} />
-                                        <YAxis tick={{fill: '#94a3b8'}} allowDecimals={false} />
-                                        <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                        <Bar dataKey="value" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={40} name="العدد" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                        {/* Geography Chart */}
-                        <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                            <h4 className="text-center text-sm text-slate-300 mb-4 font-bold flex items-center justify-center gap-2">
-                                <Map className="w-4 h-4 text-emerald-400" /> التوزيع الجغرافي (أعلى البلديات)
-                            </h4>
-                            <div className="flex-1">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={analytics.geoData} layout="vertical" margin={{ left: 10, right: 40, top: 10, bottom: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-                                        <XAxis type="number" tick={{fill: '#94a3b8'}} allowDecimals={false} />
-                                        <YAxis dataKey="name" type="category" width={90} tick={{fill: '#e2e8f0', fontSize: 11, fontWeight: 'bold'}} />
-                                        <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                        <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={20} name="العدد" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* ATTENDANCE ANALYTICS */}
-            <div className="bg-slate-900/80 backdrop-blur p-8 rounded-2xl shadow-lg border border-slate-800/60 animate-slideUp delay-100">
-                <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                        <ClipboardX className="text-red-400 w-6 h-6" />
-                        مؤشرات المواظبة والانضباط
-                    </h3>
-                    <button 
-                        onClick={refreshAllData}
-                        disabled={isRefreshing}
-                        className={`flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg transition-all border shadow-md ${
-                            isRefreshing 
-                            ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait' 
-                            : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700 hover:shadow-lg transform hover:scale-105'
-                        }`}
-                        title="تحديث البيانات"
-                    >
-                        {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
-                        {isRefreshing ? 'جاري التحديث...' : 'تحديث البيانات'}
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left: Summary Stats */}
-                    <div className="space-y-4">
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 flex flex-col items-center justify-center h-40">
-                            <span className="text-slate-400 text-sm mb-2">نسبة الحضور العامة</span>
-                            <div className="text-5xl font-black text-emerald-400 drop-shadow-lg">{analytics.attendanceRate}%</div>
-                            <div className="w-full h-2 bg-slate-700 rounded-full mt-4 overflow-hidden">
-                                <div className="h-full bg-emerald-500" style={{ width: `${analytics.attendanceRate}%` }}></div>
-                            </div>
-                        </div>
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 flex items-center justify-between h-32">
-                            <div>
-                                <span className="text-slate-400 text-sm block mb-1">مجموع الغيابات المسجلة</span>
-                                <span className="text-3xl font-black text-red-400">{analytics.totalAbsences}</span>
-                            </div>
-                            <div className="p-4 bg-red-500/10 rounded-full">
-                                <AlertTriangle className="w-8 h-8 text-red-500" />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Middle: Absence by Specialty */}
-                    <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 flex flex-col">
-                        <h4 className="text-center text-sm text-slate-300 mb-4 font-bold">عدد الغيابات حسب التخصص</h4>
-                        <div className="flex-1">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={analytics.absenceChartData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="name" tick={{fill: '#cbd5e1', fontSize: 10}} interval={0} />
-                                    <YAxis tick={{fill: '#94a3b8'}} allowDecimals={false} />
-                                    <Tooltip cursor={{fill: '#334155', opacity: 0.4}} contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px' }} />
-                                    <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={30} name="الغيابات">
-                                        {analytics.absenceChartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                        ))}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Right: Top Absentees List */}
-                    <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50 h-80 overflow-hidden flex flex-col">
-                        <h4 className="text-center text-sm text-slate-300 mb-4 font-bold text-red-300">أكثر المتكونين غياباً (Top 5)</h4>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                            {analytics.topAbsentees.length > 0 ? analytics.topAbsentees.map((item, idx) => (
-                                <div key={idx} className="flex justify-between items-center p-2 bg-slate-900/50 rounded border border-slate-700/50">
-                                    <div>
-                                        <div className="text-sm font-bold text-white">{item.name}</div>
-                                        <div className="text-[10px] text-slate-400">{item.specialty}</div>
-                                    </div>
-                                    <div className="bg-red-500/20 text-red-400 font-bold px-2 py-1 rounded text-xs">
-                                        {item.count} غياب
-                                    </div>
-                                </div>
-                            )) : (
-                                <div className="text-center text-slate-500 text-sm mt-10">لا توجد غيابات مسجلة حتى الآن</div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </div>
       </div>
     </div>
   );

@@ -1,9 +1,24 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Save, Printer, FileText, Mic, MicOff, Download, ChevronLeft, ChevronRight, PenTool } from 'lucide-react';
-import { ReportConfig, SummaryData, InstitutionConfig, Specialty, TrainerConfig, Trainee, AttendanceRecord } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Save, Printer, FileText, Mic, MicOff, Download, ChevronLeft, ChevronRight, PenTool, BarChart2, PieChart as PieChartIcon } from 'lucide-react';
+import { ReportConfig, SummaryData, InstitutionConfig, Specialty, TrainerConfig, Trainee, AttendanceRecord, EvaluationDatabase } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS, MODULES, CORRECTED_DISTRIBUTION } from '../constants';
 import { formatDate } from '../utils';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  PieChart, Pie, Cell, LineChart, Line 
+} from 'recharts';
+
+// --- PRINT FRIENDLY COLORS ---
+const PRINT_COLORS = {
+    male: '#2563eb',    // Blue
+    female: '#db2777',  // Pink
+    barPrimary: '#475569', // Slate 600
+    barSecondary: '#94a3b8', // Slate 400
+    success: '#16a34a',
+    warning: '#ca8a04',
+    danger: '#dc2626'
+};
 
 const DEFAULT_SUMMARY: SummaryData = {
     introduction: '',
@@ -29,10 +44,14 @@ const SummaryReport: React.FC = () => {
     const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({});
     const [trainees, setTrainees] = useState<Trainee[]>([]);
     const [attendance, setAttendance] = useState<AttendanceRecord>({});
+    const [grades, setGrades] = useState<EvaluationDatabase>({});
     
     // UI state
     const [activeReport, setActiveReport] = useState<'s1' | 's2' | 's3' | 'final'>('s1');
     const [isListening, setIsListening] = useState<string | null>(null);
+    
+    // --- NEW: Analytics Toggle ---
+    const [includeAnalytics, setIncludeAnalytics] = useState(false);
 
     // Load Data
     useEffect(() => {
@@ -53,6 +72,9 @@ const SummaryReport: React.FC = () => {
 
         const savedAtt = localStorage.getItem('takwin_attendance_db');
         if (savedAtt) setAttendance(JSON.parse(savedAtt));
+
+        const savedGrades = localStorage.getItem('takwin_grades_db');
+        if (savedGrades) setGrades(JSON.parse(savedGrades));
     }, []);
 
     const handleSave = () => {
@@ -117,10 +139,17 @@ const SummaryReport: React.FC = () => {
                 table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
                 td, th { border: 1px solid black; padding: 5px; text-align: center; }
                 .header { text-align: center; font-weight: bold; margin-bottom: 30px; }
+                .chart-placeholder { text-align: center; color: red; border: 1px dashed red; padding: 10px; margin: 10px 0; }
             </style>
             </head><body>`;
         const footer = "</body></html>";
-        const sourceHTML = header + content + footer;
+        // Note: Charts (SVG/Canvas) won't export directly to Word easily via HTML. 
+        // We might add a placeholder text if analytics are enabled.
+        let sourceHTML = header + content + footer;
+        
+        if (includeAnalytics) {
+            sourceHTML = sourceHTML.replace(/<div class="recharts-wrapper".*?<\/div>/g, '<div class="chart-placeholder">[رسم بياني - لا يمكن تصديره مباشرة للوورد]</div>');
+        }
 
         const blob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
         const url = URL.createObjectURL(blob);
@@ -146,45 +175,27 @@ const SummaryReport: React.FC = () => {
         return (dist?.s1 || 0) + (dist?.s2 || 0) + (dist?.s3 || 0); // Final
     };
 
-    // Helper to calculate attendance for the specific session report
     const getAttendanceStats = () => {
         if (!attendance) return null;
-        
         const allRecords = Object.entries(attendance);
         const totalTrainees = trainees.length || 1;
 
-        // --- CASE 1: FINAL REPORT (Global Reality) ---
-        // In the final report, we sum EVERYTHING present in the database.
-        // This reflects the "Actual Reality" of what has been recorded, regardless of date quirks.
         if (activeReport === 'final') {
             let finalAbsences = 0;
-            // Track unique days recorded to calculate the denominator correctly
             const uniqueDates = new Set<string>();
-            
             allRecords.forEach(([key, status]) => {
                 const dateStr = key.substring(0, 10);
                 uniqueDates.add(dateStr);
                 if (status === 'A') finalAbsences++;
             });
-
             const daysCount = uniqueDates.size;
-            // Total Possible Presence = Days Recorded * Total Trainees (Implicit Presence)
             const totalPossibleChecks = daysCount * totalTrainees;
-            
             if (totalPossibleChecks === 0) return { sessionAbsences: 0, rate: 0, totalChecks: 0 };
-
             const actualPresence = totalPossibleChecks - finalAbsences;
             const rate = Math.round((actualPresence / totalPossibleChecks) * 100);
-
-            return { 
-                sessionAbsences: finalAbsences, 
-                rate, 
-                totalChecks: totalPossibleChecks 
-            };
+            return { sessionAbsences: finalAbsences, rate, totalChecks: totalPossibleChecks };
         }
 
-        // --- CASE 2: SPECIFIC SESSIONS (Strict Date Filter) ---
-        // For S1, S2, S3, we ONLY count records that fall strictly within the official dates.
         const sessionInfo = SESSIONS.find(s => 
             (activeReport === 's1' && s.id === 1) ||
             (activeReport === 's2' && s.id === 2) ||
@@ -195,17 +206,14 @@ const SummaryReport: React.FC = () => {
 
         const start = new Date(sessionInfo.startDate);
         const end = new Date(sessionInfo.endDate);
-        // Adjust time components to ensure inclusive comparison
         start.setHours(0,0,0,0);
         end.setHours(23,59,59,999);
         
         let sessionAbsences = 0;
         const uniqueSessionDates = new Set<string>();
-        
         allRecords.forEach(([key, status]) => {
             const dateStr = key.substring(0, 10);
             const recordDate = new Date(dateStr);
-            
             if (recordDate >= start && recordDate <= end) {
                  uniqueSessionDates.add(dateStr);
                  if (status === 'A') sessionAbsences++;
@@ -214,17 +222,10 @@ const SummaryReport: React.FC = () => {
 
         const daysCount = uniqueSessionDates.size;
         const totalPossibleChecks = daysCount * totalTrainees;
-
         if (totalPossibleChecks === 0) return { sessionAbsences: 0, rate: 0, totalChecks: 0 };
-
         const actualPresence = totalPossibleChecks - sessionAbsences;
         const rate = Math.round((actualPresence / totalPossibleChecks) * 100);
-
-        return { 
-            sessionAbsences, 
-            rate, 
-            totalChecks: totalPossibleChecks 
-        };
+        return { sessionAbsences, rate, totalChecks: totalPossibleChecks };
     };
 
     const attStats = getAttendanceStats();
@@ -249,6 +250,22 @@ const SummaryReport: React.FC = () => {
                     ))}
                 </div>
 
+                {/* --- NEW TOGGLE FOR ANALYTICS --- */}
+                {activeReport === 'final' && (
+                    <button 
+                        onClick={() => setIncludeAnalytics(!includeAnalytics)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all border ${
+                            includeAnalytics 
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_10px_rgba(79,70,229,0.4)]' 
+                            : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'
+                        }`}
+                        title="دمج الرسوم البيانية والإحصائيات في التقرير"
+                    >
+                        {includeAnalytics ? <BarChart2 className="w-4 h-4" /> : <PieChartIcon className="w-4 h-4" />}
+                        {includeAnalytics ? 'إخفاء التحليل البياني' : 'تضمين التحليل البياني'}
+                    </button>
+                )}
+
                 <div className="flex gap-2">
                     <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-bold text-sm">
                         <Save className="w-4 h-4" /> حفظ
@@ -269,53 +286,12 @@ const SummaryReport: React.FC = () => {
                     <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800">
                         <h3 className="text-white font-bold mb-4 border-b border-slate-800 pb-2">تحرير محتوى التقرير</h3>
                         
-                        <InputField 
-                            label="1. مقدمة التقرير" 
-                            value={reports[activeReport].introduction} 
-                            onChange={(v) => updateField('introduction', v)}
-                            onDictate={() => toggleDictation('introduction')}
-                            isListening={isListening === 'introduction'}
-                        />
-
-                        <InputField 
-                            label="2. النشاطات البيداغوجية" 
-                            value={reports[activeReport].pedagogicalActivities} 
-                            onChange={(v) => updateField('pedagogicalActivities', v)}
-                            onDictate={() => toggleDictation('pedagogicalActivities')}
-                            isListening={isListening === 'pedagogicalActivities'}
-                        />
-
-                        <InputField 
-                            label="3. الظروف الإدارية والمادية" 
-                            value={reports[activeReport].administrativeConditions} 
-                            onChange={(v) => updateField('administrativeConditions', v)}
-                            onDictate={() => toggleDictation('administrativeConditions')}
-                            isListening={isListening === 'administrativeConditions'}
-                        />
-
-                        <InputField 
-                            label="4. الصعوبات والنقائص" 
-                            value={reports[activeReport].difficulties} 
-                            onChange={(v) => updateField('difficulties', v)}
-                            onDictate={() => toggleDictation('difficulties')}
-                            isListening={isListening === 'difficulties'}
-                        />
-
-                        <InputField 
-                            label="5. الاقتراحات والتوصيات" 
-                            value={reports[activeReport].recommendations} 
-                            onChange={(v) => updateField('recommendations', v)}
-                            onDictate={() => toggleDictation('recommendations')}
-                            isListening={isListening === 'recommendations'}
-                        />
-
-                        <InputField 
-                            label="6. الخاتمة" 
-                            value={reports[activeReport].conclusion} 
-                            onChange={(v) => updateField('conclusion', v)}
-                            onDictate={() => toggleDictation('conclusion')}
-                            isListening={isListening === 'conclusion'}
-                        />
+                        <InputField label="1. مقدمة التقرير" value={reports[activeReport].introduction} onChange={(v) => updateField('introduction', v)} onDictate={() => toggleDictation('introduction')} isListening={isListening === 'introduction'} />
+                        <InputField label="2. النشاطات البيداغوجية" value={reports[activeReport].pedagogicalActivities} onChange={(v) => updateField('pedagogicalActivities', v)} onDictate={() => toggleDictation('pedagogicalActivities')} isListening={isListening === 'pedagogicalActivities'} />
+                        <InputField label="3. الظروف الإدارية والمادية" value={reports[activeReport].administrativeConditions} onChange={(v) => updateField('administrativeConditions', v)} onDictate={() => toggleDictation('administrativeConditions')} isListening={isListening === 'administrativeConditions'} />
+                        <InputField label="4. الصعوبات والنقائص" value={reports[activeReport].difficulties} onChange={(v) => updateField('difficulties', v)} onDictate={() => toggleDictation('difficulties')} isListening={isListening === 'difficulties'} />
+                        <InputField label="5. الاقتراحات والتوصيات" value={reports[activeReport].recommendations} onChange={(v) => updateField('recommendations', v)} onDictate={() => toggleDictation('recommendations')} isListening={isListening === 'recommendations'} />
+                        <InputField label="6. الخاتمة" value={reports[activeReport].conclusion} onChange={(v) => updateField('conclusion', v)} onDictate={() => toggleDictation('conclusion')} isListening={isListening === 'conclusion'} />
                     </div>
                 </div>
 
@@ -333,6 +309,10 @@ const SummaryReport: React.FC = () => {
                         sessionInfo={currentSessionInfo}
                         getModuleHours={getModuleHours}
                         attStats={attStats}
+                        trainees={trainees}
+                        grades={grades}
+                        attendance={attendance}
+                        includeAnalytics={includeAnalytics} // Pass the toggle state
                     />
                 </div>
             </div>
@@ -349,6 +329,10 @@ const SummaryReport: React.FC = () => {
                         sessionInfo={currentSessionInfo}
                         getModuleHours={getModuleHours}
                         attStats={attStats}
+                        trainees={trainees}
+                        grades={grades}
+                        attendance={attendance}
+                        includeAnalytics={includeAnalytics} // Pass the toggle state
                     />
                 </div>
             </div>
@@ -356,32 +340,77 @@ const SummaryReport: React.FC = () => {
     );
 };
 
-// Sub-components for cleaner code
+// --- HELPER COMPONENT: ANALYTICS CALCULATOR ---
+// This logic mirrors DataAnalytics.tsx but returns pure data structures for the report
+const useReportAnalytics = (trainees: Trainee[], grades: EvaluationDatabase, attendance: AttendanceRecord) => {
+    return useMemo(() => {
+        if (!trainees.length) return null;
 
-const InputField: React.FC<{
-    label: string, 
-    value: string, 
-    onChange: (v: string) => void, 
-    onDictate: () => void,
-    isListening: boolean
-}> = ({ label, value, onChange, onDictate, isListening }) => (
+        const processed = trainees.map(t => {
+            // Calculate Average similar to EvaluationManager
+            const tGrades = grades[t.id] || { modules: {} };
+            let sumWeighted = 0, totalCoeff = 0;
+            MODULES.forEach(m => {
+                const mg = tGrades.modules?.[m.id];
+                const avgCC = ((mg?.s1||0) + (mg?.s2||0) + (mg?.s3||0)) / 3;
+                const exam = mg?.exam || 0;
+                sumWeighted += (avgCC * 2 * m.coefficient) + (exam * 3 * m.coefficient);
+                totalCoeff += (m.coefficient * 5);
+            });
+            const report = tGrades.report || 0;
+            const finalAvg = totalCoeff ? parseFloat(((sumWeighted + report) / (totalCoeff + 1)).toFixed(2)) : 0;
+            
+            // Absences
+            const absences = Object.entries(attendance).filter(([k, v]) => k.endsWith(`-${t.id}`) && v === 'A').length;
+            
+            // Age
+            let age = 0;
+            if (t.dob) {
+                const y = parseInt(t.dob.split(/[-/]/)[0]);
+                if (!isNaN(y)) age = 2025 - y;
+            }
+
+            return { ...t, finalAvg, absences, age };
+        });
+
+        // Gender Data
+        const males = processed.filter(d => d.gender === 'M');
+        const females = processed.filter(d => d.gender === 'F');
+        const genderData = [
+            { name: 'ذكور', value: males.length, avg: males.reduce((a,b)=>a+b.finalAvg,0)/(males.length||1) },
+            { name: 'إناث', value: females.length, avg: females.reduce((a,b)=>a+b.finalAvg,0)/(females.length||1) }
+        ];
+
+        // Age Buckets
+        const ageBuckets: Record<string, number> = { '<25':0, '25-30':0, '30-35':0, '>35':0 };
+        processed.forEach(p => {
+            if (p.age < 25) ageBuckets['<25']++;
+            else if (p.age <= 30) ageBuckets['25-30']++;
+            else if (p.age <= 35) ageBuckets['30-35']++;
+            else ageBuckets['>35']++;
+        });
+        const ageData = Object.entries(ageBuckets).map(([name, count]) => ({ name, count }));
+
+        // Module Performance
+        const modulePerf = MODULES.map(m => {
+            const validGrades = processed.map(p => grades[p.id]?.modules?.[m.id]?.exam || 0).filter(g => g > 0);
+            const avg = validGrades.length ? validGrades.reduce((a,b)=>a+b,0)/validGrades.length : 0;
+            return { name: m.shortTitle, avg: parseFloat(avg.toFixed(2)) };
+        }).sort((a,b) => a.avg - b.avg);
+
+        return { genderData, ageData, modulePerf, total: processed.length };
+    }, [trainees, grades, attendance]);
+};
+
+const InputField: React.FC<{ label: string, value: string, onChange: (v: string) => void, onDictate: () => void, isListening: boolean }> = ({ label, value, onChange, onDictate, isListening }) => (
     <div className="mb-4">
         <div className="flex justify-between items-center mb-1">
             <label className="text-slate-400 text-sm font-bold">{label}</label>
-            <button 
-                onClick={onDictate}
-                className={`p-1.5 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                title="الكتابة بالصوت"
-            >
+            <button onClick={onDictate} className={`p-1.5 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-800 text-slate-400 hover:text-white'}`} title="الكتابة بالصوت">
                 {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
             </button>
         </div>
-        <textarea 
-            value={value}
-            onChange={e => onChange(e.target.value)}
-            className="w-full h-24 bg-slate-950 border border-slate-700 rounded-lg p-3 text-white text-sm focus:border-dzgreen-500 focus:outline-none resize-y"
-            placeholder="أدخل النص هنا..."
-        />
+        <textarea value={value} onChange={e => onChange(e.target.value)} className="w-full h-24 bg-slate-950 border border-slate-700 rounded-lg p-3 text-white text-sm focus:border-dzgreen-500 focus:outline-none resize-y" placeholder="أدخل النص هنا..." />
     </div>
 );
 
@@ -393,12 +422,19 @@ const ReportContent: React.FC<{
     trainerConfig: TrainerConfig,
     sessionInfo?: any,
     getModuleHours: (id: number) => number,
-    attStats: any
-}> = ({ activeReport, data, institution, specialties, trainerConfig, sessionInfo, getModuleHours, attStats }) => {
+    attStats: any,
+    trainees: Trainee[],
+    grades: EvaluationDatabase,
+    attendance: AttendanceRecord,
+    includeAnalytics: boolean
+}> = ({ activeReport, data, institution, specialties, trainerConfig, sessionInfo, getModuleHours, attStats, trainees, grades, attendance, includeAnalytics }) => {
     
     const totalHours = activeReport === 'final' ? 190 : sessionInfo?.hoursTotal;
     const sessionName = activeReport === 'final' ? 'التقرير النهائي للتكوين' : `تقرير ${sessionInfo?.name}`;
     const dateRange = activeReport === 'final' ? 'الموسم التكويني: 2025 / 2026' : `الفترة: من ${sessionInfo?.startDate} إلى ${sessionInfo?.endDate}`;
+
+    // Compute Analytics if enabled
+    const analytics = includeAnalytics ? useReportAnalytics(trainees, grades, attendance) : null;
 
     return (
         <div className="font-serif leading-relaxed text-black" style={{ direction: 'rtl' }}>
@@ -476,6 +512,40 @@ const ReportContent: React.FC<{
                 </table>
             </div>
 
+            {/* --- INJECTED ANALYTICS: Demographics --- */}
+            {includeAnalytics && analytics && (
+                <div className="mb-8 border border-slate-300 p-4 rounded bg-slate-50 break-inside-avoid">
+                    <h4 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2">
+                        <BarChart2 className="w-4 h-4" /> 
+                        2.1. قراءة بيانية في تركيبة المتكونين:
+                    </h4>
+                    <div className="flex gap-4 h-40">
+                        <div className="flex-1">
+                            <p className="text-xs text-center mb-1 font-bold">توزيع الجنس</p>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={analytics.genderData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={40} label={(entry) => entry.name}>
+                                        <Cell fill={PRINT_COLORS.male} />
+                                        <Cell fill={PRINT_COLORS.female} />
+                                    </Pie>
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="flex-1 border-r border-slate-300 pr-4">
+                            <p className="text-xs text-center mb-1 font-bold">الفئات العمرية</p>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={analytics.ageData}>
+                                    <XAxis dataKey="name" tick={{fontSize: 9}} />
+                                    <YAxis hide />
+                                    <Bar dataKey="count" fill={PRINT_COLORS.barSecondary} label={{ position: 'top', fontSize: 10 }} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2 italic text-center">الشكل (1): التمثيل البياني للتركيبة الديموغرافية للمتكونين</p>
+                </div>
+            )}
+
             {/* 3. Program Execution */}
             <div className="mb-6 break-inside-avoid">
                 <h3 className="text-lg font-bold underline mb-2">3. تنفيذ البرنامج البيداغوجي:</h3>
@@ -492,8 +562,6 @@ const ReportContent: React.FC<{
                         {MODULES.map((m) => {
                             const hours = getModuleHours(m.id);
                             if (hours === 0) return null;
-
-                            // Get trainers string
                             let trainerNames = '';
                             if (m.id === 1) {
                                 trainerNames = "أساتذة التعليمية (حسب التخصص)";
@@ -502,7 +570,6 @@ const ReportContent: React.FC<{
                                 const list = Object.values(names).filter(Boolean);
                                 trainerNames = list.length > 0 ? list.join('، ') : '---';
                             }
-
                             return (
                                 <tr key={m.id}>
                                     <td className="border border-black p-1">{m.id}</td>
@@ -520,7 +587,27 @@ const ReportContent: React.FC<{
                 </table>
             </div>
 
-            {/* 4. Attendance Stats (Dynamic) */}
+            {/* --- INJECTED ANALYTICS: Module Performance --- */}
+            {includeAnalytics && analytics && (
+                <div className="mb-8 border border-slate-300 p-4 rounded bg-slate-50 break-inside-avoid">
+                    <h4 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2">
+                        <BarChart2 className="w-4 h-4" /> 
+                        3.1. مؤشرات الأداء البيداغوجي (تحليل الصعوبة):
+                    </h4>
+                    <div className="h-48 w-full">
+                        <ResponsiveContainer>
+                            <BarChart data={analytics.modulePerf} layout="vertical" margin={{left: 0, right: 20}}>
+                                <XAxis type="number" domain={[0, 20]} hide />
+                                <YAxis type="category" dataKey="name" width={100} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                                <Bar dataKey="avg" fill={PRINT_COLORS.barPrimary} barSize={15} label={{ position: 'right', fill: 'black', fontSize: 10 }} radius={[0,4,4,0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-2 italic text-center">الشكل (2): ترتيب المقاييس حسب معدل تحصيل المتكونين (من الأصعب إلى الأسهل)</p>
+                </div>
+            )}
+
+            {/* 4. Attendance Stats */}
             {attStats && (
                 <div className="mb-6 break-inside-avoid">
                     <h3 className="text-lg font-bold underline mb-2">4. حالة المواظبة والغياب:</h3>
@@ -535,7 +622,7 @@ const ReportContent: React.FC<{
                 </div>
             )}
 
-            {/* 5. Text Sections (Renumbered) */}
+            {/* 5. Text Sections */}
             {data.introduction && (
                 <div className="mb-4">
                     <h3 className="text-lg font-bold underline mb-1">5. مقدمة وسيرورة الدورة:</h3>
@@ -585,7 +672,7 @@ const ReportContent: React.FC<{
                     <p>........................</p>
                 </div>
                 <div className="text-center">
-                    <p className="font-bold mb-16">المدير البيداغوجي</p>
+                    <p className="font-bold mb-16">مدير التربية</p>
                     <p>........................</p>
                 </div>
             </div>
