@@ -412,6 +412,7 @@ const Dashboard: React.FC = () => {
                 <button 
                     onClick={() => { setEditInstitution(institution); setIsEditingInst(true); }}
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
+                    title="تعديل البيانات"
                 >
                     <Edit2 className="w-3.5 h-3.5" />
                     تعديل البيانات
@@ -421,6 +422,7 @@ const Dashboard: React.FC = () => {
                     <button 
                         onClick={handleSaveInst}
                         className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
+                        title="حفظ"
                     >
                         <Save className="w-3.5 h-3.5" />
                         حفظ
@@ -428,6 +430,7 @@ const Dashboard: React.FC = () => {
                     <button 
                         onClick={() => setIsEditingInst(false)}
                         className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                        title="إلغاء"
                     >
                         <X className="w-3.5 h-3.5" />
                         إلغاء
@@ -511,7 +514,7 @@ const Dashboard: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 flex items-center justify-between hover:border-blue-500/30 transition-colors group">
           <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">مجموع الأساتذة المتكونين</p>
+            <p className="text-slate-400 text-sm font-medium mb-1">مجموع الأساتذة</p>
             <h3 className="text-3xl font-bold text-white group-hover:text-blue-400 transition-colors">
                 {trainees.length > 0 ? trainees.length : totalTrainees}
             </h3>
@@ -548,6 +551,7 @@ const Dashboard: React.FC = () => {
             <div className="flex gap-2 w-full mt-1">
                 <button 
                     onClick={handleExportDB}
+                    title="حفظ قاعدة البيانات"
                     className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 rounded-lg transition-colors border border-slate-700"
                 >
                     <Download className="w-3.5 h-3.5" />
@@ -555,6 +559,7 @@ const Dashboard: React.FC = () => {
                 </button>
                 <button 
                     onClick={handleImportClick}
+                    title="استيراد قاعدة البيانات"
                     className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded-lg transition-colors shadow-lg shadow-blue-900/20"
                 >
                     <Upload className="w-3.5 h-3.5" />
@@ -585,6 +590,7 @@ const Dashboard: React.FC = () => {
                             <button 
                                 onClick={handleEditClick}
                                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg transition-colors border border-blue-500/20"
+                                title="تعديل التخصصات"
                             >
                                 <Edit2 className="w-3.5 h-3.5" />
                                 تعديل
@@ -594,6 +600,7 @@ const Dashboard: React.FC = () => {
                                 <button 
                                     onClick={handleSave}
                                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
+                                    title="حفظ"
                                 >
                                     <Save className="w-3.5 h-3.5" />
                                     حفظ
@@ -601,6 +608,7 @@ const Dashboard: React.FC = () => {
                                 <button 
                                     onClick={() => { setIsEditing(false); setEditData([...specialties]); }}
                                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                                    title="إلغاء"
                                 >
                                     <X className="w-3.5 h-3.5" />
                                     إلغاء
@@ -689,6 +697,7 @@ const Dashboard: React.FC = () => {
                         <button 
                             onClick={handleEditTrainers}
                             className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 rounded-lg transition-colors border border-purple-500/20"
+                            title="تعيين الأساتذة"
                         >
                             <Edit2 className="w-3.5 h-3.5" />
                             تعيين الأساتذة
@@ -698,6 +707,7 @@ const Dashboard: React.FC = () => {
                             <button 
                                 onClick={handleSaveTrainers}
                                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm"
+                                title="حفظ"
                             >
                                 <Save className="w-3.5 h-3.5" />
                                 حفظ
@@ -705,6 +715,7 @@ const Dashboard: React.FC = () => {
                             <button 
                                 onClick={() => { setIsEditingTrainers(false); setEditTrainerConfig(JSON.parse(JSON.stringify(trainerConfig))); }}
                                 className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+                                title="إلغاء"
                             >
                                 <X className="w-3.5 h-3.5" />
                                 إلغاء
@@ -908,7 +919,7 @@ const Dashboard: React.FC = () => {
                             ? 'bg-slate-700 text-slate-400 border-slate-600 cursor-wait' 
                             : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700 hover:shadow-lg transform hover:scale-105'
                         }`}
-                        title="تحديث البيانات من السجل"
+                        title="تحديث البيانات"
                     >
                         {isRefreshing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
                         {isRefreshing ? 'جاري التحديث...' : 'تحديث البيانات'}

@@ -371,7 +371,7 @@ const InputField: React.FC<{
             <button 
                 onClick={onDictate}
                 className={`p-1.5 rounded-full transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
-                title="كتابة بالصوت"
+                title="الكتابة بالصوت"
             >
                 {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
             </button>
@@ -581,7 +581,7 @@ const ReportContent: React.FC<{
             {/* Signatures */}
             <div className="flex justify-between mt-16 px-12">
                 <div className="text-center">
-                    <p className="font-bold mb-16">مدير المركز</p>
+                    <p className="font-bold mb-16">المدير البيداغوجي</p>
                     <p>........................</p>
                 </div>
                 <div className="text-center">

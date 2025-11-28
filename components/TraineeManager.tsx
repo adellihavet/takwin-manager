@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon } from 'lucide-react';
+import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig, AttendanceRecord } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES } from '../constants';
 
@@ -19,6 +19,7 @@ const TraineeManager: React.FC = () => {
     const [attendanceDate, setAttendanceDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isAdding, setIsAdding] = useState(false);
+    const [transferTarget, setTransferTarget] = useState<Trainee | null>(null);
     
     // Form State
     const [newTrainee, setNewTrainee] = useState<Partial<Trainee>>({
@@ -52,19 +53,32 @@ const TraineeManager: React.FC = () => {
         localStorage.setItem('takwin_attendance_db', JSON.stringify(data));
     };
 
+    // Logic: Only Toggle Absence. 
+    // If 'A' exists -> Remove it (Implies Present).
+    // If not 'A' -> Set 'A'.
     const toggleAttendance = (traineeId: string) => {
         const key = `${attendanceDate}-${traineeId}`;
         const currentStatus = attendance[key];
         const newAttendance = { ...attendance };
 
-        if (currentStatus === 'P') {
-            newAttendance[key] = 'A'; // Present -> Absent
-        } else if (currentStatus === 'A') {
-            delete newAttendance[key]; // Absent -> Reset
+        if (currentStatus === 'A') {
+            delete newAttendance[key]; // Reset to Present (Default)
         } else {
-            newAttendance[key] = 'P'; // Reset -> Present
+            newAttendance[key] = 'A'; // Mark Absent
         }
         saveAttendance(newAttendance);
+    };
+
+    const handleTransfer = (newGroupId: number) => {
+        if (!transferTarget) return;
+        
+        const updatedTrainees = trainees.map(t => 
+            t.id === transferTarget.id ? { ...t, groupId: newGroupId } : t
+        );
+        
+        saveTrainees(updatedTrainees);
+        setTransferTarget(null);
+        alert(`تم نقل المتربص ${transferTarget.surname} ${transferTarget.name} إلى الفوج ${newGroupId} بنجاح.`);
     };
 
     // --- SMART ADD LOGIC (Auto Balance) ---
@@ -284,7 +298,13 @@ const TraineeManager: React.FC = () => {
                             
                             <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex gap-2 items-center bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Table className="w-4 h-4"/> استيراد</button>
                             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".csv, .txt" />
-                            <button onClick={() => setIsAdding(!isAdding)} className="btn-primary flex gap-2 items-center bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Plus className="w-4 h-4"/> إضافة</button>
+                            <button 
+                                onClick={() => setIsAdding(!isAdding)} 
+                                className="btn-primary flex gap-2 items-center bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+                                title="إضافة متربص"
+                            >
+                                <Plus className="w-4 h-4"/> إضافة
+                            </button>
                             {trainees.length > 0 && <button onClick={handleDeleteAll} className="btn-danger flex gap-2 items-center bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Trash2 className="w-4 h-4"/> حذف الكل</button>}
                         </div>
                     </div>
@@ -326,6 +346,45 @@ const TraineeManager: React.FC = () => {
                         </select>
                     </div>
 
+                    {/* Transfer Modal */}
+                    {transferTarget && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+                            <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <Repeat className="text-purple-400" />
+                                        نقل المتربص
+                                    </h3>
+                                    <button onClick={() => setTransferTarget(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                                </div>
+                                
+                                <div className="mb-6 bg-slate-800 p-4 rounded-xl">
+                                    <div className="text-sm text-slate-400 mb-1">المتربص المحدد:</div>
+                                    <div className="font-bold text-white text-lg">{transferTarget.surname} {transferTarget.name}</div>
+                                    <div className="text-xs text-purple-400 mt-1">الفوج الحالي: {transferTarget.groupId}</div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="block text-sm font-bold text-slate-300 mb-2">اختر الفوج الجديد:</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {Array.from({ length: specialties.find(s => s.id === transferTarget.specialtyId)?.groups || 1 })
+                                            .map((_, i) => i + 1)
+                                            .filter(gNum => gNum !== transferTarget.groupId)
+                                            .map(gNum => (
+                                                <button
+                                                    key={gNum}
+                                                    onClick={() => handleTransfer(gNum)}
+                                                    className="bg-slate-800 hover:bg-purple-600 hover:text-white text-slate-300 border border-slate-700 rounded-lg py-3 font-bold transition-all"
+                                                >
+                                                    الفوج {gNum}
+                                                </button>
+                                            ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Table */}
                     <div className="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden print:hidden">
                         <table className="w-full text-right text-sm">
@@ -341,17 +400,37 @@ const TraineeManager: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
-                                {filteredTrainees.map((t, idx) => (
-                                    <tr key={t.id} className="hover:bg-slate-800/50">
-                                        <td className="p-4 text-slate-500">{idx + 1}</td>
-                                        <td className="p-4 font-bold text-white">{t.surname} {t.name}</td>
-                                        <td className="p-4 text-slate-300">{t.dob}</td>
-                                        <td className="p-4">{specialties.find(s=>s.id === t.specialtyId)?.name}</td>
-                                        <td className="p-4"><span className="bg-purple-500/10 text-purple-300 px-2 py-1 rounded font-bold">{t.groupId ? `فوج ${t.groupId}` : '-'}</span></td>
-                                        <td className="p-4 text-slate-300">{t.school}</td>
-                                        <td className="p-4 text-center"><button onClick={() => handleDelete(t.id)} className="text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4"/></button></td>
-                                    </tr>
-                                ))}
+                                {filteredTrainees.map((t, idx) => {
+                                    const spec = specialties.find(s=>s.id === t.specialtyId);
+                                    const canTransfer = spec && spec.groups > 1;
+
+                                    return (
+                                        <tr key={t.id} className="hover:bg-slate-800/50">
+                                            <td className="p-4 text-slate-500">{idx + 1}</td>
+                                            <td className="p-4 font-bold text-white">{t.surname} {t.name}</td>
+                                            <td className="p-4 text-slate-300">{t.dob}</td>
+                                            <td className="p-4">{spec?.name}</td>
+                                            <td className="p-4"><span className="bg-purple-500/10 text-purple-300 px-2 py-1 rounded font-bold">{t.groupId ? `فوج ${t.groupId}` : '-'}</span></td>
+                                            <td className="p-4 text-slate-300">{t.school}</td>
+                                            <td className="p-4 text-center">
+                                                <div className="flex items-center justify-center gap-2">
+                                                    {canTransfer && (
+                                                        <button 
+                                                            onClick={() => setTransferTarget(t)}
+                                                            className="text-blue-400 hover:text-blue-300 p-1 hover:bg-slate-700 rounded transition-colors text-xs font-bold flex items-center gap-1"
+                                                            title="نقل لفوج آخر"
+                                                        >
+                                                            <Repeat className="w-3 h-3"/> نقل
+                                                        </button>
+                                                    )}
+                                                    <button onClick={() => handleDelete(t.id)} className="text-red-400 hover:text-red-300 p-1 hover:bg-slate-700 rounded transition-colors">
+                                                        <Trash2 className="w-4 h-4"/>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -407,13 +486,7 @@ const TraineeManager: React.FC = () => {
                         </div>
 
                         <div className="mr-auto flex gap-2">
-                            <button 
-                                onClick={() => setIsAdding(true)}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-bold shadow-lg transition-colors"
-                            >
-                                <UserPlus className="w-4 h-4" />
-                                إضافة للفوج
-                            </button>
+                            {/* Add Button Removed based on request */}
                             <button 
                                 onClick={handlePrintGroup}
                                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold shadow-lg transition-colors"
@@ -423,35 +496,6 @@ const TraineeManager: React.FC = () => {
                             </button>
                         </div>
                     </div>
-
-                    {/* Smart Add Modal (Reused for Group Tab) */}
-                    {isAdding && (
-                        <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 animate-slideDown print:hidden">
-                            <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-                                <UserPlus className="text-blue-400" />
-                                إضافة متربص جديد (سيتم إدراجه آلياً في الفوج الأنسب)
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <input placeholder="اللقب" className="bg-slate-900 border border-slate-600 p-2 rounded text-white" value={newTrainee.surname || ''} onChange={e => setNewTrainee({...newTrainee, surname: e.target.value})} />
-                                <input placeholder="الاسم" className="bg-slate-900 border border-slate-600 p-2 rounded text-white" value={newTrainee.name || ''} onChange={e => setNewTrainee({...newTrainee, name: e.target.value})} />
-                                <input type="date" className="bg-slate-900 border border-slate-600 p-2 rounded text-white" value={newTrainee.dob || ''} onChange={e => setNewTrainee({...newTrainee, dob: e.target.value})} />
-                                <input placeholder="المؤسسة" className="bg-slate-900 border border-slate-600 p-2 rounded text-white" value={newTrainee.school || ''} onChange={e => setNewTrainee({...newTrainee, school: e.target.value})} />
-                                {/* Specialty is locked to current view */}
-                                <div className="p-2 bg-slate-900/50 border border-slate-700 rounded text-slate-400 text-sm flex items-center">
-                                    التخصص: {specialties.find(s => s.id === selectedGroupSpec)?.name}
-                                </div>
-                            </div>
-                            <div className="mt-4 flex gap-2 justify-end">
-                                <button onClick={() => setIsAdding(false)} className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-bold">إلغاء</button>
-                                <button 
-                                    onClick={() => { setNewTrainee({...newTrainee, specialtyId: selectedGroupSpec}); handleSmartAdd(); }} 
-                                    className="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg font-bold"
-                                >
-                                    تأكيد الإضافة
-                                </button>
-                            </div>
-                        </div>
-                    )}
 
                     {/* Screen View Table */}
                     <div className="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden print:hidden">
@@ -469,7 +513,7 @@ const TraineeManager: React.FC = () => {
                                     <th className="p-4">اللقب والاسم</th>
                                     <th className="p-4">تاريخ الميلاد</th>
                                     <th className="p-4">المؤسسة</th>
-                                    <th className="p-4 w-32 text-center">غياب / حضور</th>
+                                    <th className="p-4 w-32 text-center">تسجيل الغياب</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
@@ -486,14 +530,17 @@ const TraineeManager: React.FC = () => {
                                             <td className="p-4 text-center">
                                                 <button 
                                                     onClick={() => toggleAttendance(t.id)}
-                                                    className={`w-8 h-8 rounded flex items-center justify-center transition-colors border-2 ${
-                                                        status === 'P' ? 'bg-emerald-500/20 border-emerald-500 text-emerald-500' :
-                                                        status === 'A' ? 'bg-red-500/20 border-red-500 text-red-500' :
-                                                        'border-slate-600 text-transparent hover:border-slate-400'
+                                                    className={`w-full py-1.5 rounded flex items-center justify-center gap-2 font-bold transition-colors border ${
+                                                        status === 'A' 
+                                                        ? 'bg-red-500 text-white border-red-600' 
+                                                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-red-500/50 hover:text-red-400'
                                                     }`}
                                                 >
-                                                    {status === 'P' && <Check className="w-5 h-5" />}
-                                                    {status === 'A' && <XIcon className="w-5 h-5" />}
+                                                    {status === 'A' ? (
+                                                        <><XIcon className="w-4 h-4" /> غائــب</>
+                                                    ) : (
+                                                        <><Check className="w-4 h-4" /> حاضــر</>
+                                                    )}
                                                 </button>
                                             </td>
                                         </tr>
@@ -504,53 +551,52 @@ const TraineeManager: React.FC = () => {
                         </table>
                     </div>
 
-                    {/* PRINT TEMPLATE - DAILY SIGNATURE SHEET */}
+                    {/* PRINT TEMPLATE - DAILY SIGNATURE SHEET (OPTIMIZED) */}
                     <div id="print-section" className="hidden print:block fixed inset-0 bg-white text-black z-[9999] p-8">
-                        <div className="text-center mb-6 border-b-2 border-black pb-4" style={{ direction: 'rtl' }}>
+                        <div className="text-center mb-4 border-b-2 border-black pb-2" style={{ direction: 'rtl' }}>
                             <h3 className="font-bold text-lg">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
                             <h3 className="font-bold text-lg">وزارة التربية الوطنية</h3>
-                            <div className="flex justify-between mt-4 text-sm font-bold px-4">
+                            <div className="flex justify-between mt-2 text-sm font-bold px-4">
                                 <span>مديرية التربية: {institution.wilaya}</span>
                                 <span>مركز التكوين: {institution.center}</span>
                             </div>
-                            <h1 className="text-3xl font-black mt-6 border-2 border-black inline-block px-8 py-2 rounded">
+                            <h1 className="text-2xl font-black mt-4 border-2 border-black inline-block px-8 py-2 rounded">
                                 ورقة الحضور اليومية
                             </h1>
-                            <div className="mt-4 flex justify-around text-lg font-bold">
+                            <div className="mt-2 flex justify-around text-lg font-bold">
                                 <span>التخصص: {specialties.find(s => s.id === selectedGroupSpec)?.name}</span>
                                 <span>الفـــــوج: {selectedGroupNum}</span>
                                 <span>التاريخ: {attendanceDate}</span>
                             </div>
                         </div>
 
-                        <table className="w-full border-2 border-black text-center text-sm" style={{ direction: 'rtl' }}>
+                        <table className="w-full border-2 border-black text-center text-sm table-fixed" style={{ direction: 'rtl' }}>
                             <thead>
-                                <tr className="bg-gray-200">
-                                    <th className="border border-black p-2 w-10">رقم</th>
-                                    <th className="border border-black p-2">اللقب والاسم</th>
-                                    <th className="border border-black p-2 w-28">تاريخ الميلاد</th>
-                                    <th className="border border-black p-2">مؤسسة العمل</th>
-                                    <th className="border border-black p-2 w-32">الإمضاء</th>
-                                    <th className="border border-black p-2 w-40">ملاحظات</th>
+                                <tr className="bg-gray-200 h-10">
+                                    <th className="border border-black p-1 w-[5%]">رقم</th>
+                                    <th className="border border-black p-1 w-[35%]">اللقب والاسم</th>
+                                    <th className="border border-black p-1 w-[15%]">تاريخ الميلاد</th>
+                                    <th className="border border-black p-1 w-[25%]">مؤسسة العمل</th>
+                                    <th className="border border-black p-1 w-[20%]">الإمضاء</th>
+                                    {/* Notes column removed per request to optimize space */}
                                 </tr>
                             </thead>
                             <tbody>
                                 {groupTrainees.map((t, idx) => (
-                                    <tr key={t.id}>
-                                        <td className="border border-black p-2 font-bold">{idx + 1}</td>
-                                        <td className="border border-black p-2 font-bold text-right px-3">{t.surname} {t.name}</td>
-                                        <td className="border border-black p-2">{t.dob}</td>
-                                        <td className="border border-black p-2 text-right px-2">{t.school}</td>
-                                        <td className="border border-black"></td>
+                                    <tr key={t.id} className="h-10">
+                                        <td className="border border-black p-1 font-bold">{idx + 1}</td>
+                                        <td className="border border-black p-1 font-bold text-right px-3 whitespace-nowrap overflow-hidden text-ellipsis">{t.surname} {t.name}</td>
+                                        <td className="border border-black p-1">{t.dob}</td>
+                                        <td className="border border-black p-1 text-right px-2 whitespace-nowrap overflow-hidden text-ellipsis">{t.school}</td>
                                         <td className="border border-black"></td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
 
-                        <div className="mt-8 flex justify-between px-12 font-bold">
+                        <div className="mt-8 flex justify-between px-12 font-bold text-lg">
                             <div>إمضاء الأستاذ المكون</div>
-                            <div>إمضاء المدير البيداغوجي</div>
+                            <div>المدير البيداغوجي</div>
                         </div>
                     </div>
                 </div>

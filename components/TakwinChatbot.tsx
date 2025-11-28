@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, X, Bot, Sparkles } from 'lucide-react';
+import { Send, X, MessageSquare, ChevronLeft, Terminal, Bot, Zap } from 'lucide-react';
 
 interface Message {
     id: number;
@@ -10,160 +11,121 @@ interface Message {
     timestamp: Date;
 }
 
+// --- KNOWLEDGE BASE (The Brain) ---
+// This ensures that button clicks (actions) ALWAYS return the correct response directly.
+const KNOWLEDGE_BASE: Record<string, { text: string, options?: { label: string; action: string }[] }> = {
+    // --- EVALUATION & GRADES ---
+    "calc_help": {
+        text: "**طريقة حساب المعدلات بالتفصيل:**\n\nيعتمد النظام القاعدة الرسمية التالية:\n\n1. **معدل المقياس:** (تقويم د1 + تقويم د2 + تقويم د3) ÷ 3 = معدل المراقبة المستمرة (CC).\n2. **المعدل العام للمتربص:**\n   ((معدل CC × 2) + (علامة الامتحان × 3) + (علامة التقرير × 1)) ÷ 6\n\n*ملاحظة:* يتم ضرب المعدلات في معاملات المقاييس عند حساب المجموع العام.",
+        options: [{ label: "مشاكل استيراد النقاط", action: "import_grades_help" }]
+    },
+    "import_grades_help": {
+        text: "**قواعد استيراد النقاط (Excel/CSV):**\n\nلتجنب الأخطاء الكارثية:\n1. **العمود الأول (ID_SYSTEM):** هو مفتاح الربط المشفر. ممنوع تغييره أو حذفه.\n2. **تطابق الملف:** حمل القائمة من زر 'تحميل القائمة' لنفس المقياس، املأها، ثم أعد رفعها لنفس المقياس.\n3. **الترتيب:** لا تغير ترتيب الأسماء في ملف الإكسل.\n4. **الفواصل:** النظام يقبل النقطة (.) أو الفاصلة (،) للكسور.",
+        options: [{ label: "كيفية المداولات", action: "deliberation_help" }]
+    },
+    "deliberation_help": {
+        text: "**المداولات النهائية:**\n\nفي تبويب 'التقويم' > 'المداولات':\n- يمكنك طباعة محضر المداولات (PV) كاملاً مع الإحصائيات.\n- يمكنك تصدير قائمة الناجحين والمؤجلين.\n- **تنبيه:** تأكد من حجز نقطة 'التقرير النهائي' (المذكرة) قبل طباعة المحضر لأن معاملها 1.",
+    },
+
+    // --- TIMETABLE ---
+    "timetable_gen": {
+        text: "**توليد التوزيع الزمني:**\n\n- **التوليد الشامل:** يقوم بملء الجدول مع مراعاة الفراغات البيداغوجية.\n- **بدون فراغات:** يضغط الحصص لتكون متتالية.\n- **التعارض:** إذا فشل التوليد، فهذا يعني أن عدد الأساتذة غير كافٍ لتغطية عدد الأفواج في نفس الوقت. الحل هو إضافة أساتذة جدد في 'إدارة الطاقم البيداغوجي'.",
+        options: [{ label: "التعديل اليدوي", action: "manual_edit_help" }, { label: "مصفوفة التحقق", action: "matrix_help" }]
+    },
+    "manual_edit_help": {
+        text: "**التعديل اليدوي (Drag & Drop):**\n\n- اسحب الحصة وأفلتها في المكان الجديد.\n- **الحماية:** سيمنعك النظام ويظهر رسالة خطأ حمراء إذا كان الأستاذ المعني يدرس فوجاً آخر في ذلك التوقيت.\n- لا يمكنك التعديل إذا لم تولد الجدول أولاً.",
+    },
+    "matrix_help": {
+        text: "**مصفوفة التحقق من الإسناد:**\n\nتظهر أسفل الجدول. وظيفتها ضمان 'الاستقرار البيداغوجي'.\n- **علامة صح خضراء:** نفس الأستاذ يدرس الفوج في كل الدورات.\n- **علامة خطأ حمراء:** الفوج يدرسه أساتذة مختلفون في دورات مختلفة (يجب توحيد الأستاذ يدوياً).",
+    },
+
+    // --- EXAMS & PROCTORS ---
+    "exam_proctors": {
+        text: "**توزيع الحراسة:**\n\nالنظام يوزع الحراس آلياً بمعيار 'العدل':\n- يحاول مساواة عدد الحراسات بين الجميع.\n- يمنع وضع نفس الحارس في نفس القاعة مرتين متتاليتين.\n- **هام:** يجب توليد قاعات الامتحان أولاً قبل توزيع الحراس.",
+        options: [{ label: "حراس خارجيين", action: "ext_proctor_help" }, { label: "تفويج القاعات", action: "exam_rooms_help" }]
+    },
+    "ext_proctor_help": {
+        text: "**إضافة حراس خارجيين:**\n\nفي تبويب 'الامتحانات' > 'الحراسة':\n- يمكنك إضافة أسماء موظفين إداريين أو عمال لدعم الحراسة.\n- سيتم دمجهم فوراً في القرعة الآلية للتوزيع.\n- يمكنك حذفهم لاحقاً بزر سلة المهملات.",
+    },
+    "exam_rooms_help": {
+        text: "بناءً على التعليمات، يتم تقسيم المتربصين إلى قاعات بسعة **20 متربص** لكل قاعة.\nالعملية تتم آلياً بالترتيب الأبجدي لكل تخصص.",
+    },
+
+    // --- TRAINEES ---
+    "trainee_import": {
+        text: "**استيراد المتربصين:**\n\n- الصيغة الوحيدة المقبولة هي CSV.\n- استخدم زر 'نموذج CSV' للحصول على القالب الصحيح.\n- **هام:** التخصص يجب أن يكتب بدقة (مثلاً: 'لغة عربية') ليتعرف عليه النظام ويسنده للون المناسب.",
+        options: [{ label: "التوزيع الآلي للأفواج", action: "auto_group_help" }]
+    },
+    "auto_group_help": {
+        text: "يتم توزيع المتربصين على الأفواج بنظام 'Round Robin' (واحد بواحد) لضمان تساوي العدد بدقة متناهية بين جميع الأفواج.",
+    },
+
+    // --- PRINTING ---
+    "print_issues": {
+        text: "**حل مشاكل الطباعة:**\n\nلظهور الألوان والتنسيق الصحيح:\n1. في نافذة الطباعة، ابحث عن **More Settings**.\n2. فعل خيار **Background Graphics** (ضروري جداً).\n3. اجعل الهوامش **Margins: None** أو Minimum.\n4. تأكد من اتجاه الورقة (Landscape للجداول، Portrait للشهادات).",
+    },
+
+    // --- CERTIFICATES ---
+    "certs_help": {
+        text: "**الشهادات:**\n\n- تطبع فقط للناجحين (معدل >= 10).\n- **تاريخ المحضر:** حقل يدوي، يجب كتابته ليظهر في متن الشهادة.\n- التصميم مطابق للنموذج الوزاري الرسمي.",
+    },
+
+    // --- GENERAL ---
+    "db_save": {
+        text: "**حفظ العمل:**\n\nاضغط زر 'حفظ قاعدة البيانات' في لوحة القيادة يومياً. الملف الناتج (.json) هو ضمانك الوحيد لاسترجاع العمل إذا تعطل المتصفح أو غيرت الحاسوب.",
+    }
+};
+
 const TakwinChatbot: React.FC = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [inputText, setInputText] = useState('');
     const [messages, setMessages] = useState<Message[]>([]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // --- Knowledge Base & Logic ---
-    const getBotResponse = (input: string): { text: string, options?: { label: string; action: string }[] } => {
-        const text = input.toLowerCase().trim();
+    // --- INTELLIGENT MATCHING ENGINE ---
+    const findBestResponse = (rawInput: string) => {
+        const input = rawInput.toLowerCase(); // Normalization happens implicitly via includes/regex
 
-        // 0. GREETINGS
-        if (text.match(/^(مرحبا|اهلين|السلام|تحية)/)) {
-             return {
-                text: "أهلاً بك! كيف يمكنني مساعدتك في تسيير الدورة اليوم؟",
-                options: [
-                    { label: "أريد دليلاً للبدء", action: "guide_start" },
-                    { label: "نصائح الطباعة", action: "print_help" }
-                ]
-            };
-        }
-
-        // 1. DASHBOARD & GENERAL
-        if (text.match(/(احصائيات|عدد|ارقام|كم يوجد|المسجلين)/)) {
-            const trainees = JSON.parse(localStorage.getItem('takwin_trainees_db') || '[]');
-            return {
-                text: `حالياً، النظام يحتوي على ${trainees.length} متربص مسجل.\nيمكنك الاطلاع على التفاصيل الكاملة (الجنس، التوزيع الجغرافي) في 'لوحة القيادة'.`
-            };
-        }
+        // High Priority Keywords
+        if (input.includes('حساب') || input.includes('معدل')) return KNOWLEDGE_BASE["calc_help"];
+        if (input.includes('طباعة') || input.includes('الوان') || input.includes('pdf')) return KNOWLEDGE_BASE["print_issues"];
+        if (input.includes('نقاط') || input.includes('excel') || input.includes('csv')) return KNOWLEDGE_BASE["import_grades_help"];
+        if (input.includes('مداولات') || input.includes('محضر')) return KNOWLEDGE_BASE["deliberation_help"];
         
-        // 2. TIMETABLE (GENERATOR & EDITOR)
-        if (text.match(/(توزيع|جدول|توقيت|حصص|رزنامة)/) || text === 'schedule_help') {
-             if (text.includes("توليد") || text.includes("انشاء")) {
-                 return { text: "لتوليد الجدول: اذهب لتبويب 'التوزيع'، اختر الدورة الزمنية، واضغط 'توليد التوزيع الشامل'. النظام سيقوم بالعملية آلياً." };
-             }
-             if (text.includes("تعديل") || text.includes("تغيير")) {
-                 return { text: "يمكنك تعديل الجدول يدوياً عبر تبويب 'تعديل'. استخدم السحب والإفلات لنقل الحصص بين الأيام." };
-             }
-             if (text.includes("طباعة")) {
-                 return { text: "لطباعة الجداول: اذهب لتبويب 'التوزيع' > قسم الطباعة أسفل الصفحة. يمكنك طباعة جدول خاص بفوج معين أو بأستاذ معين." };
-             }
-            return {
-                text: "نظام التوزيع الزمني ينقسم لقسمين:\n1. 'التوزيع': للتوليد الآلي والطباعة.\n2. 'تعديل': للتعديل اليدوي بالسحب والإفلات.\nماذا تحتاج بالضبط؟",
-                options: [
-                    { label: "طريقة التوليد الآلي", action: "how_gen_table" },
-                    { label: "كيفية التعديل اليدوي", action: "how_edit_table" },
-                    { label: "حل تعارض الأساتذة", action: "conflict_help" }
-                ]
-            };
+        if (input.includes('توزيع') && (input.includes('وقت') || input.includes('زمني') || input.includes('جدول'))) return KNOWLEDGE_BASE["timetable_gen"];
+        if (input.includes('تعديل') && (input.includes('يدوي') || input.includes('سحب'))) return KNOWLEDGE_BASE["manual_edit_help"];
+        if (input.includes('مصفوفة') || input.includes('ثبات') || input.includes('احمر')) return KNOWLEDGE_BASE["matrix_help"];
+        
+        if (input.includes('حراس') || input.includes('مراقبة')) {
+            if (input.includes('خارجي') || input.includes('اضافي')) return KNOWLEDGE_BASE["ext_proctor_help"];
+            return KNOWLEDGE_BASE["exam_proctors"];
         }
-        // Specific actions for timetable
-        if (text === 'how_gen_table') return { text: "في تبويب 'التوزيع'، تأكد أولاً من ضبط عدد الأساتذة في لوحة القيادة، ثم اضغط زر 'توليد التوزيع الشامل' وانتظر قليلاً." };
-        if (text === 'how_edit_table') return { text: "في تبويب 'تعديل'، اختر الفوج، ستظهر لك شبكة التوقيت. اسحب أي حصة ملونة وأفلتها في مكان فارغ أو فوق حصة أخرى للتبديل." };
-        if (text === 'conflict_help') return { text: "أثناء التعديل اليدوي، إذا حاولت نقل حصة لوقت يكون فيه الأستاذ مشغولاً مع فوج آخر، سيقوم النظام بمنعك وإظهار رسالة تنبيه." };
+        if (input.includes('قاعات') || input.includes('20')) return KNOWLEDGE_BASE["exam_rooms_help"];
 
-        // 3. TRAINEES
-        if (text.match(/(متربص|غياب|حضور|قائمة|فوج|افواج)/)) {
-            if (text.includes("اضافة") || text.includes("تسجيل")) {
-                return { text: "لإضافة متربص: اذهب لتبويب 'المتكونين' واضغط زر 'إضافة'. يمكنك أيضاً استيراد قائمة كاملة بملف Excel/CSV." };
-            }
-            if (text.includes("غياب")) {
-                return { text: "لتسجيل الغيابات: اذهب لتبويب 'المتكونين' > اختر 'قوائم الحضور والغياب'. اضغط على المربع أمام اسم المتربص لتغيير حالته (حاضر/غائب)." };
-            }
-             if (text.includes("فوج") || text.includes("افواج")) {
-                return { text: "يمكنك توزيع المتربصين على الأفواج آلياً عبر زر 'توزيع آلي' في تبويب المتكونين. النظام سيوزعهم بالتساوي حسب الترتيب الأبجدي." };
-            }
-            return {
-                text: "إدارة المتكونين تشمل التسجيل، التفويج، ومتابعة الغيابات. ماذا تريد أن تفعل؟",
-                options: [
-                    { label: "استيراد قائمة", action: "how_import" },
-                    { label: "تسجيل الغياب", action: "how_absence" },
-                    { label: "طباعة ورقة الحضور", action: "print_attendance" }
-                ]
-            };
-        }
-        if (text === 'how_import') return { text: "اضغط زر 'استيراد' في صفحة المتكونين. الملف يجب أن يكون CSV يحتوي الأعمدة: الرقم، اللقب، الاسم، تاريخ الميلاد..." };
-        if (text === 'how_absence') return { text: "من تبويب 'المتكونين'، انتقل للوضع 'قوائم الحضور'، اختر الفوج والتاريخ، ثم انقر لتغيير الحالة." };
-        if (text === 'print_attendance') return { text: "بعد اختيار الفوج في قسم 'قوائم الحضور'، سيظهر لك زر 'طباعة القائمة' الذي يولد ورقة الإمضاء اليومية." };
+        if (input.includes('متربص') && (input.includes('استيراد') || input.includes('ملف'))) return KNOWLEDGE_BASE["trainee_import"];
+        if (input.includes('افواج') || input.includes('تفويج')) return KNOWLEDGE_BASE["auto_group_help"];
+        
+        if (input.includes('شهادة') || input.includes('دبلوم')) return KNOWLEDGE_BASE["certs_help"];
+        if (input.includes('حفظ') || input.includes('بيانات') || input.includes('ضاع')) return KNOWLEDGE_BASE["db_save"];
 
-        // 4. EVALUATION & GRADES
-        if (text.match(/(نقاط|معدل|علامات|تقييم|كشف)/) || text === 'evaluation_help') {
-            if (text.includes("حساب")) {
-                return { text: "المعدل العام يحسب كالتالي:\n((معدل المراقبة × 2) + (الامتحان × 3) + (نقطة التقرير × 1)) ÷ 6." };
-            }
-            if (text.includes("استيراد") || text.includes("excel")) {
-                return { text: "في تبويب 'التقويم'، يمكنك تحميل نموذج Excel لكل مقياس، ملؤه بالنقاط، ثم إعادة رفعه لملء العلامات آلياً." };
-            }
-            return {
-                text: "موديول التقويم يتيح لك حجز نقاط المراقبة المستمرة، الامتحانات، والتقرير النهائي. كما يقوم بحساب المعدلات آلياً.",
-                options: [
-                    { label: "كيفية حساب المعدل", action: "calc_formula" },
-                    { label: "استيراد النقاط", action: "grades_import" },
-                    { label: "طباعة كشف النقاط", action: "print_grades" }
-                ]
-            };
-        }
-        if (text === 'calc_formula') return { text: "الصيغة الرسمية:\n( (معدل البطاقات × 2) + (الامتحان النهائي × 3) + (علامة التربص/التقرير × 1) ) تقسيم 6.\nالنجاح يتطلب معدل 10/20." };
-        if (text === 'grades_import') return { text: "1. اذهب لتبويب 'التقويم'.\n2. اختر المقياس.\n3. اضغط 'تحميل القائمة' لتحصل على ملف CSV.\n4. املأ النقاط في الملف.\n5. اضغط 'رفع النقاط' لاستيراده." };
-        if (text === 'print_grades') return { text: "في الجدول أسفل تبويب 'التقويم'، اضغط على أيقونة العين (👁️) أمام اسم المتربص لفتح كشف النقاط التفصيلي وطباعته." };
-
-        // 5. EXAMS
-        if (text.match(/(امتحان|حراسة|قاعة|استدعاء)/) || text === 'exams_help') {
-             return {
-                text: "قسم الامتحانات يتيح لك:\n- ضبط تواريخ الامتحانات.\n- توزيع المتربصين على القاعات (20/قاعة).\n- التوزيع الآلي للحراس.\n- طباعة الاستدعاءات ومحضر سير الامتحان.",
-                options: [
-                    { label: "توزيع الحراس", action: "proctor_auto" },
-                    { label: "طباعة الاستدعاءات", action: "print_convocation" }
-                ]
-            };
-        }
-        if (text === 'proctor_auto') return { text: "في تبويب 'الامتحانات' > 'الحراسة'، اضغط 'توزيع آلي'. الخوارزمية ستوزع الحراس المتوفرين لضمان وجود حارسين في كل قاعة دون تضارب." };
-        if (text === 'print_convocation') return { text: "من تبويب 'الامتحانات' > 'طباعة الوثائق'، اختر 'استدعاءات الحراسة'. يمكنك طباعة الاستدعاءات فردياً أو جدول شامل." };
-
-        // 6. CERTIFICATES & REPORTS
-        if (text.match(/(شهادة|تقرير|مداولات|نجاح)/)) {
-             return {
-                text: "الوثائق الختامية:\n- الشهادات: تطبع فقط للناجحين (معدل >= 10).\n- المداولات: تطبع محضر اللجنة الرسمي.\n- التقرير التكويني: لتحرير التقرير الوصفي للدورة.",
-                options: [
-                    { label: "طباعة الشهادات", action: "print_certs" },
-                    { label: "محضر المداولات", action: "print_pv" }
-                ]
-            };
-        }
-        if (text === 'print_certs') return { text: "اذهب لتبويب 'الشهادات'. أدخل تاريخ المداولات، ثم اضغط 'طباعة الكل'. الشهادات ستملأ آلياً ببيانات الناجحين." };
-        if (text === 'print_pv') return { text: "في تبويب 'التقويم' > 'المداولات النهائية'، املأ بيانات اللجنة واضغط 'طباعة المحضر'. المحضر يحتوي الإحصائيات وقائمة الناجحين." };
-
-        // 7. PRINTING & SAVING
-        if (text.match(/(حفظ|ضياع|بيانات|طباعة|مشكلة)/) || text === 'print_help') {
-             if (text.includes("حفظ")) return { text: "للحفاظ على عملك، اضغط زر 'حفظ قاعدة البيانات' في لوحة القيادة بانتظام. هذا ينزل ملفاً يحتوي كل بياناتك لاسترجاعها لاحقاً." };
-             return {
-                text: "نصائح هامة للطباعة:\n1. اضبط الهوامش (Margins) على 'None' أو 'Minimum'.\n2. فعل خيار 'Background Graphics' لطباعة الألوان والخلفيات.\n3. استخدم متصفح Google Chrome لأفضل نتيجة."
-            };
-        }
-
-        // 8. GUIDE / START
-        if (text.match(/(بداية|شرح|كيف ابدا|مساعدة)/) || text === 'guide_start') {
-             return {
-                text: "خطوات العمل المقترحة:\n1. 'القيادة': ضبط بيانات المؤسسة والأساتذة.\n2. 'المتكونين': استيراد القائمة وتوزيع الأفواج.\n3. 'التوزيع': توليد الجدول الزمني.\n4. 'التقويم': حجز النقاط وطباعة الشهادات.",
-                options: [
-                    { label: "توزيع الأساتذة", action: "setup_trainers" },
-                    { label: "استيراد المتربصين", action: "how_import" }
-                ]
-            };
-        }
-        if (text === 'setup_trainers') return { text: "في 'لوحة القيادة'، قسم 'إدارة الطاقم البيداغوجي'، حدد عدد الأساتذة لكل مقياس واكتب أسماءهم ليظهروا في الجداول والاستدعاءات." };
-
-        // FALLBACK
+        // Fallback
         return {
-            text: "عذراً، لم أفهم استفسارك بدقة. هل يمكنك صياغته بشكل آخر؟\nأنا أفهم كلمات مثل: 'توزيع'، 'نقاط'، 'امتحان'، 'شهادة'، 'متربص'، 'طباعة'...",
+            text: "عذراً، لم أفهم سؤالك بدقة. \n\nأنا ملم بكل الجوانب التقنية، جرب سؤالي عن:\n- طريقة حساب المعدل\n- مشاكل الطباعة\n- كيفية توزيع الحراسة\n- استيراد النقاط",
             options: [
-                { label: "كيف أبدأ؟", action: "guide_start" },
-                { label: "مشكلة في الطباعة", action: "print_help" },
-                { label: "كيفية حساب المعدل", action: "calc_formula" }
+                { label: "طريقة حساب المعدل", action: "calc_help" },
+                { label: "مشاكل الطباعة", action: "print_issues" },
+                { label: "توزيع الحراسة", action: "exam_proctors" }
             ]
         };
+    };
+
+    const processAction = (actionKey: string) => {
+        const response = KNOWLEDGE_BASE[actionKey];
+        if (response) {
+            return response;
+        }
+        // Fallback if action key is missing (should not happen with correct wiring)
+        return { text: "حدث خطأ في استرجاع المعلومة المطلوبة." };
     };
 
     // --- COMPONENT LOGIC ---
@@ -172,14 +134,15 @@ const TakwinChatbot: React.FC = () => {
         if (messages.length === 0) {
             setMessages([{
                 id: 1,
-                text: "مرحباً بك في منصة تسيير التكوين.\nأنا المساعد الآلي 'مرشد'، موجود هنا لتسهيل عملك والإجابة على استفساراتك حول كيفية استخدام المنصة، التوزيع الزمني، الامتحانات، والوثائق الإدارية.",
+                text: "مرحباً سيدي المدير! \n\nأنا جاهز تماماً للإجابة على أدق التفاصيل التقنية والقانونية للتطبيق.\nيمكنك الاعتماد علي في شرح طريقة الحساب، حل مشاكل الطباعة، وتسيير الامتحانات.",
                 sender: 'bot',
                 timestamp: new Date(),
                 type: 'options',
                 options: [
-                    { label: "كيف أبدأ العمل؟", action: "guide_start" },
-                    { label: "إدارة الامتحانات", action: "exams_help" },
-                    { label: "مشاكل الطباعة", action: "print_help" }
+                    { label: "طريقة حساب المعدل", action: "calc_help" },
+                    { label: "مشاكل الطباعة والألوان", action: "print_issues" },
+                    { label: "توزيع الحراسة والامتحانات", action: "exam_proctors" },
+                    { label: "استيراد النقاط (Excel)", action: "import_grades_help" }
                 ]
             }]);
         }
@@ -200,24 +163,10 @@ const TakwinChatbot: React.FC = () => {
         };
 
         setMessages(prev => [...prev, userMsg]);
-        processResponse(inputText);
         setInputText('');
-    };
 
-    const handleOptionClick = (action: string, label: string) => {
-        const userMsg: Message = {
-            id: Date.now(),
-            text: label,
-            sender: 'user',
-            timestamp: new Date()
-        };
-        setMessages(prev => [...prev, userMsg]);
-        processResponse(action);
-    };
-
-    const processResponse = (query: string) => {
         setTimeout(() => {
-            const response = getBotResponse(query);
+            const response = findBestResponse(inputText);
             const botMsg: Message = {
                 id: Date.now() + 1,
                 text: response.text,
@@ -230,43 +179,70 @@ const TakwinChatbot: React.FC = () => {
         }, 500);
     };
 
+    const handleOptionClick = (action: string, label: string) => {
+        // 1. Add User Click as Message
+        const userMsg: Message = {
+            id: Date.now(),
+            text: label,
+            sender: 'user',
+            timestamp: new Date()
+        };
+        setMessages(prev => [...prev, userMsg]);
+        
+        // 2. Direct Action Lookup (No NLP Guessing)
+        setTimeout(() => {
+            const response = processAction(action);
+            const botMsg: Message = {
+                id: Date.now() + 1,
+                text: response.text,
+                sender: 'bot',
+                type: response.options ? 'options' : 'text',
+                options: response.options,
+                timestamp: new Date()
+            };
+            setMessages(prev => [...prev, botMsg]);
+        }, 400);
+    };
+
     return (
         <>
             <button 
                 onClick={() => setIsOpen(!isOpen)}
-                className={`fixed left-6 bottom-6 z-[9990] p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 flex items-center justify-center ${
-                    isOpen ? 'bg-red-500 rotate-90' : 'bg-indigo-600'
+                title="المساعد الذكي"
+                className={`fixed left-6 bottom-6 z-[9990] p-3.5 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 flex items-center justify-center border-2 border-white/20 ${
+                    isOpen ? 'bg-slate-700 rotate-90' : 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-500/40'
                 }`}
             >
                 {isOpen ? <X className="w-6 h-6 text-white" /> : <Bot className="w-7 h-7 text-white" />}
             </button>
 
-            <div className={`fixed left-6 bottom-24 z-[9999] w-80 md:w-96 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 origin-bottom-left ${
+            <div className={`fixed left-6 bottom-24 z-[9999] w-80 md:w-96 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 origin-bottom-left ${
                 isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-10 pointer-events-none'
-            }`} style={{ height: '550px' }}>
+            }`} style={{ height: '550px', maxHeight: '80vh' }}>
                 
                 {/* Header */}
                 <div className="bg-slate-800 p-4 border-b border-slate-700 flex items-center gap-3">
-                    <div className="p-2 bg-indigo-500/10 rounded-lg">
-                        <Bot className="w-5 h-5 text-indigo-400" />
+                    <div className="p-2 bg-indigo-500/20 rounded-lg border border-indigo-500/30">
+                        <Terminal className="w-5 h-5 text-indigo-400" />
                     </div>
                     <div>
-                        <h3 className="font-bold text-white text-sm">المساعد الذكي (مرشد)</h3>
-                        <p className="text-[10px] text-slate-400">متصل - قاعدة المعارف V2.0</p>
+                        <h3 className="font-bold text-white text-sm">المساعد التقني (Takwin Bot)</h3>
+                        <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <Zap className="w-3 h-3 fill-current" /> متصل الآن
+                        </p>
                     </div>
                 </div>
 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/50 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/95 custom-scrollbar scroll-smooth">
                     {messages.map((msg) => (
-                        <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
-                            <div className={`max-w-[85%] rounded-2xl p-3 text-sm leading-relaxed relative ${
+                        <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'} animate-fadeIn`}>
+                            <div className={`max-w-[90%] rounded-2xl p-3 text-sm leading-relaxed shadow-md ${
                                 msg.sender === 'user' 
                                 ? 'bg-indigo-600 text-white rounded-tr-none' 
                                 : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
                             }`}>
-                                {msg.sender === 'bot' && <Sparkles className="w-3 h-3 text-amber-400 absolute -top-1 -right-1" />}
-                                <p className="whitespace-pre-line">{msg.text}</p>
+                                <div className="whitespace-pre-line dir-rtl">{msg.text}</div>
                                 
                                 {msg.type === 'options' && msg.options && (
                                     <div className="mt-3 flex flex-wrap gap-2">
@@ -274,14 +250,14 @@ const TakwinChatbot: React.FC = () => {
                                             <button 
                                                 key={idx}
                                                 onClick={() => handleOptionClick(opt.action, opt.label)}
-                                                className="bg-slate-700 hover:bg-slate-600 text-indigo-200 text-xs py-1.5 px-3 rounded-lg transition-colors border border-slate-600 font-medium"
+                                                className="bg-slate-700 hover:bg-slate-600 hover:text-white text-indigo-300 text-xs py-2 px-3 rounded-lg transition-colors border border-slate-600 font-bold flex items-center gap-1 shadow-sm"
                                             >
-                                                {opt.label}
+                                                <ChevronLeft className="w-3 h-3" /> {opt.label}
                                             </button>
                                         ))}
                                     </div>
                                 )}
-                                <span className="text-[9px] opacity-50 block mt-1 text-left">
+                                <span className="text-[9px] opacity-40 block mt-1 text-left select-none">
                                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                             </div>
@@ -297,12 +273,13 @@ const TakwinChatbot: React.FC = () => {
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
                         onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                        placeholder="اكتب استفسارك..."
-                        className="flex-1 bg-slate-900 border border-slate-600 rounded-xl px-4 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                        placeholder="اكتب سؤالك هنا..."
+                        className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-sm text-white focus:border-indigo-500 outline-none placeholder:text-slate-500"
                     />
                     <button 
                         onClick={handleSend}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white p-2.5 rounded-xl transition-colors shadow-lg"
+                        disabled={!inputText.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-all shadow-lg"
                     >
                         <Send className="w-4 h-4" />
                     </button>

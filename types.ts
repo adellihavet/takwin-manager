@@ -81,6 +81,7 @@ export interface TrainerAssignment {
   groupId: string;
   dayIndex: number;
   hourIndex: number;
+  sessionId?: number; // Added to distinguish between sessions in the same DB
 }
 
 export interface InstitutionConfig {
@@ -128,17 +129,21 @@ export interface Trainee {
 // Key: "YYYY-MM-DD-TraineeID", Value: 'P' (Present) | 'A' (Absent)
 export type AttendanceRecord = Record<string, 'P' | 'A'>;
 
-// New Interface for Grades
-export interface GradeRecord {
-  s1?: number;
-  s2?: number;
-  s3?: number;
-  finalExam?: number;
-  report?: number;
+// --- UPDATED GRADING TYPES ---
+export interface ModuleGrades {
+  s1?: number;   // Continuous Assessment Session 1
+  s2?: number;   // Continuous Assessment Session 2
+  s3?: number;   // Continuous Assessment Session 3
+  exam?: number; // Final Exam
 }
 
-// Map TraineeID -> GradeRecord
-export type EvaluationDatabase = Record<string, GradeRecord>;
+export interface TraineeGrades {
+  modules: Record<number, ModuleGrades>; // Key is Module ID
+  report?: number; // Final Report Mark
+}
+
+// Map TraineeID -> TraineeGrades
+export type EvaluationDatabase = Record<string, TraineeGrades>;
 
 // --- EXAM MANAGEMENT TYPES ---
 export interface ExamSlot {

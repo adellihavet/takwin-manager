@@ -43,8 +43,15 @@ const TimetableEditor: React.FC = () => {
         return g.specialtyId === specId && g.groupId === parseInt(localId);
     });
 
-    const getTrainerKey = (groupId: string, moduleId: number) => {
-        const entry = assignments.find(a => a.groupId === groupId && a.moduleId === moduleId);
+    const getTrainerKey = (groupId: string, moduleId: number, dayIndex: number, hourIndex: number) => {
+        // Use more specific lookup
+        const entry = assignments.find(a => 
+            a.sessionId === selectedSessionId &&
+            a.groupId === groupId && 
+            a.moduleId === moduleId &&
+            a.dayIndex === dayIndex &&
+            a.hourIndex === hourIndex
+        );
         return entry?.trainerKey;
     };
 
@@ -65,11 +72,24 @@ const TimetableEditor: React.FC = () => {
     const checkConflict = (moduleId: number, targetDayIdx: number, targetHourIdx: number): { conflict: boolean, reason: string } => {
         if (moduleId === 999) return { conflict: false, reason: '' }; 
 
-        const trainerKey = getTrainerKey(selectedGroupGlobalId, moduleId);
+        // We need to find WHO is the trainer for this module in this group.
+        // But since we are moving things, we might not have a set assignment for the TARGET slot yet.
+        // Strategy: Look for an existing assignment for this group/module on another day/time to identify the trainer.
+        // OR rely on static assignment logic from Generator.
+        
+        // Find existing assignment for this module/group anywhere in this session to identify the trainer
+        const existingAssign = assignments.find(a => 
+            a.sessionId === selectedSessionId &&
+            a.groupId === selectedGroupGlobalId && 
+            a.moduleId === moduleId
+        );
+        
+        const trainerKey = existingAssign?.trainerKey;
         if (!trainerKey) return { conflict: false, reason: '' }; 
 
         // Check if this trainer is busy in the target slot with ANOTHER group
         const conflict = assignments.find(a => 
+            a.sessionId === selectedSessionId &&
             a.dayIndex === targetDayIdx &&
             a.hourIndex === targetHourIdx &&
             a.trainerKey === trainerKey &&
@@ -94,17 +114,15 @@ const TimetableEditor: React.FC = () => {
     const handleDragStart = (e: React.DragEvent, dayIdx: number, hourIdx: number, moduleId: number, duration: number) => {
         setDraggedSlot({ dayIdx, hourIdx, moduleId, duration });
         e.dataTransfer.effectAllowed = "move";
-        // Hide ghost image
         const img = new Image();
         img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
         e.dataTransfer.setDragImage(img, 0, 0);
     };
 
     const handleDragOver = (e: React.DragEvent, targetDayIdx: number, targetHourIdx: number) => {
-        e.preventDefault(); // Necessary to allow dropping
+        e.preventDefault();
         if (!draggedSlot) return;
 
-        // Prevent dropping on same slot
         if (draggedSlot.dayIdx === targetDayIdx && draggedSlot.hourIdx === targetHourIdx) {
             setDropFeedback(null);
             return;
@@ -126,14 +144,12 @@ const TimetableEditor: React.FC = () => {
         if (!draggedSlot || !currentGroupSchedule) return;
         if (draggedSlot.dayIdx === targetDayIdx && draggedSlot.hourIdx === targetHourIdx) return;
 
-        // 1. Final Conflict Check
         const { conflict } = checkConflict(draggedSlot.moduleId, targetDayIdx, targetHourIdx);
         if (conflict) {
             alert("لا يمكن النقل لوجود تعارض مع توقيت الأستاذ.");
             return;
         }
 
-        // 2. Execute Move/Swap
         const newSchedule = JSON.parse(JSON.stringify(schedule));
         const groupIdx = newSchedule.findIndex((g: GroupSchedule) => 
             g.specialtyId === currentGroupSchedule.specialtyId && 
@@ -142,18 +158,27 @@ const TimetableEditor: React.FC = () => {
         
         const groupDays = newSchedule[groupIdx].days;
         
-        // Identify Source & Target Slots in Data Structure
-        // NOTE: Logic assumes 1-hour slots primarily for simplicity in this editor version
-        const sourceSlotIdx = groupDays[draggedSlot.dayIdx].slots.findIndex((s: any) => parseInt(s.time) === (8 + draggedSlot.hourIdx));
-        const targetSlotIdx = groupDays[targetDayIdx].slots.findIndex((s: any) => parseInt(s.time) === (8 + targetHourIdx));
+        // Find matching days in the full schedule structure by Date string match
+        // Because groupDays contains ALL sessions.
+        const sourceDateStr = workingDays[draggedSlot.dayIdx].toISOString();
+        const targetDateStr = workingDays[targetDayIdx].toISOString();
+
+        const realSourceDayIdx = groupDays.findIndex((d: any) => d.date === sourceDateStr);
+        const realTargetDayIdx = groupDays.findIndex((d: any) => d.date === targetDateStr);
+
+        if (realSourceDayIdx === -1 || realTargetDayIdx === -1) {
+            console.error("Date mismatch in editor drop");
+            return;
+        }
+
+        const sourceSlotIdx = groupDays[realSourceDayIdx].slots.findIndex((s: any) => parseInt(s.time) === (8 + draggedSlot.hourIdx));
+        const targetSlotIdx = groupDays[realTargetDayIdx].slots.findIndex((s: any) => parseInt(s.time) === (8 + targetHourIdx));
 
         const sourceModuleId = draggedSlot.moduleId;
         let targetModuleId: number | null = null;
 
-        // Check reverse conflict if swapping (Target has a module)
         if (targetSlotIdx !== -1) {
-            targetModuleId = groupDays[targetDayIdx].slots[targetSlotIdx].moduleId;
-            // Check if Target Module's Trainer is free at Source Time
+            targetModuleId = groupDays[realTargetDayIdx].slots[targetSlotIdx].moduleId;
             const reverseCheck = checkConflict(targetModuleId!, draggedSlot.dayIdx, draggedSlot.hourIdx);
             if (reverseCheck.conflict) {
                 alert(`لا يمكن التبديل: ${reverseCheck.reason}`);
@@ -161,62 +186,62 @@ const TimetableEditor: React.FC = () => {
             }
         }
 
-        // Modify Schedule Array
-        // A. Remove Source
-        if (sourceSlotIdx !== -1) groupDays[draggedSlot.dayIdx].slots.splice(sourceSlotIdx, 1);
-        // B. Remove Target (if exists)
-        if (targetSlotIdx !== -1) groupDays[targetDayIdx].slots.splice(targetSlotIdx, 1);
+        // --- UPDATE SCHEDULE ---
+        if (sourceSlotIdx !== -1) groupDays[realSourceDayIdx].slots.splice(sourceSlotIdx, 1);
+        if (targetSlotIdx !== -1) groupDays[realTargetDayIdx].slots.splice(targetSlotIdx, 1);
 
-        // C. Add Source to Target Location
-        groupDays[targetDayIdx].slots.push({
+        groupDays[realTargetDayIdx].slots.push({
             time: `${8+targetHourIdx}:00 - ${9+targetHourIdx}:00`,
             moduleId: sourceModuleId,
             duration: 1
         });
 
-        // D. Add Target to Source Location (Swap)
         if (targetModuleId !== null) {
-            groupDays[draggedSlot.dayIdx].slots.push({
+            groupDays[realSourceDayIdx].slots.push({
                 time: `${8+draggedSlot.hourIdx}:00 - ${9+draggedSlot.hourIdx}:00`,
                 moduleId: targetModuleId,
                 duration: 1
             });
         }
 
-        // Modify Assignments Array (Critical for global consistency)
+        // --- UPDATE ASSIGNMENTS ---
         let newAssignments = assignments.filter(a => 
-            // Remove old assignments for this group at these times
-            !(a.groupId === selectedGroupGlobalId && a.dayIndex === draggedSlot.dayIdx && a.hourIndex === draggedSlot.hourIdx) &&
-            !(a.groupId === selectedGroupGlobalId && a.dayIndex === targetDayIdx && a.hourIndex === targetHourIdx)
+            // Remove specific slot assignments for this session/group
+            !(a.sessionId === selectedSessionId && a.groupId === selectedGroupGlobalId && a.dayIndex === draggedSlot.dayIdx && a.hourIndex === draggedSlot.hourIdx) &&
+            !(a.sessionId === selectedSessionId && a.groupId === selectedGroupGlobalId && a.dayIndex === targetDayIdx && a.hourIndex === targetHourIdx)
         );
 
-        // Add new assignment for Moved Module
-        const tKeySource = getTrainerKey(selectedGroupGlobalId, sourceModuleId);
+        // Recover trainer keys from ANY previous assignment in this session for the same group/module
+        const findTrainerKey = (modId: number) => {
+            return assignments.find(a => a.sessionId === selectedSessionId && a.groupId === selectedGroupGlobalId && a.moduleId === modId)?.trainerKey;
+        };
+
+        const tKeySource = findTrainerKey(sourceModuleId);
         if (tKeySource) {
             newAssignments.push({
                 moduleId: sourceModuleId,
                 trainerKey: tKeySource,
                 groupId: selectedGroupGlobalId,
                 dayIndex: targetDayIdx,
-                hourIndex: targetHourIdx
+                hourIndex: targetHourIdx,
+                sessionId: selectedSessionId
             });
         }
 
-        // Add new assignment for Swapped Module
         if (targetModuleId !== null) {
-            const tKeyTarget = getTrainerKey(selectedGroupGlobalId, targetModuleId!);
+            const tKeyTarget = findTrainerKey(targetModuleId!);
             if (tKeyTarget) {
                 newAssignments.push({
                     moduleId: targetModuleId!,
                     trainerKey: tKeyTarget,
                     groupId: selectedGroupGlobalId,
                     dayIndex: draggedSlot.dayIdx,
-                    hourIndex: draggedSlot.hourIdx
+                    hourIndex: draggedSlot.hourIdx,
+                    sessionId: selectedSessionId
                 });
             }
         }
 
-        // Save State & LocalStorage
         setSchedule(newSchedule);
         setAssignments(newAssignments);
         localStorage.setItem('takwin_schedule', JSON.stringify(newSchedule));
@@ -307,8 +332,10 @@ const TimetableEditor: React.FC = () => {
                                         {formatDate(day.toISOString())}
                                     </div>
                                     {[0,1,2,3,4].map(hIdx => {
-                                        const slot = currentGroupSchedule.days[dIdx]?.slots.find(s => parseInt(s.time.split(':')[0]) === (8 + hIdx))
-                                            || currentGroupSchedule.days[dIdx]?.slots.find(s => parseInt(s.time.split(':')[0]) === (8 + hIdx - 1) && s.duration === 2);
+                                        // Lookup logic using strict Date String matching
+                                        const daySched = currentGroupSchedule?.days.find(d => d.date === day.toISOString());
+                                        const slot = daySched?.slots.find(s => parseInt(s.time.split(':')[0]) === (8 + hIdx))
+                                            || daySched?.slots.find(s => parseInt(s.time.split(':')[0]) === (8 + hIdx - 1) && s.duration === 2);
                                         
                                         const isOccupied = !!slot?.moduleId;
                                         // Only highlight drop zones if dragging

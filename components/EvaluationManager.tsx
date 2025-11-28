@@ -485,8 +485,8 @@ const EvaluationManager: React.FC = () => {
                         </div>
                         
                         <div className="hidden print:flex justify-between mt-12 px-8 font-bold text-lg">
-                            <div>إمضاء الأستاذ المنسق</div>
-                            <div>إمضاء مدير التكوين</div>
+                            <div></div>
+                            <div>إمضاء المدير البيداغوجي</div>
                         </div>
                     </div>
                 </div>
@@ -497,6 +497,16 @@ const EvaluationManager: React.FC = () => {
     // --- RENDER ---
     return (
         <div className="space-y-6 animate-fadeIn pb-24">
+            {/* CSS to hide ghost print section on screen (Added Fix) */}
+            <style>{`
+                @media screen {
+                    #print-section { display: none !important; }
+                }
+                @media print {
+                    #print-section { display: block !important; }
+                }
+            `}</style>
+
             {/* Modal */}
             {selectedTraineeForDetail && <GradeDetailModal />}
 

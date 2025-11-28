@@ -1,4 +1,3 @@
-
 import { Specialty, SessionInfo, Module, Distribution, ModuleContent } from './types';
 
 export const SPECIALTIES: Specialty[] = [
@@ -49,7 +48,7 @@ export const MODULES: (Module & { coefficient: number })[] = [
   },
   { 
     id: 2, 
-    title: 'النظام التربوي والمناهج التعليمية', 
+    title: 'النظام التربوي الجزائري والمناهج التعليمية', 
     shortTitle: 'النظام التربوي',
     totalHours: 20,
     coefficient: 1,
@@ -58,7 +57,7 @@ export const MODULES: (Module & { coefficient: number })[] = [
   { 
     id: 3, 
     title: 'علوم التربية وعلم النفس', 
-    shortTitle: 'علم النفس',
+    shortTitle: 'علوم التربية',
     totalHours: 20,
     coefficient: 1,
     description: 'علم النفس العام، العمليات العقلية، المراحل العمرية (الطفولة والمراهقة)، سيكولوجية الفروق الفردية، والمشكلات النفسية والتربوية.'
@@ -73,7 +72,7 @@ export const MODULES: (Module & { coefficient: number })[] = [
   },
   { 
     id: 5, 
-    title: 'ميثاق أخلاقيات المهنة', 
+    title: 'أخلاقيات و أدبيات المهنة', 
     shortTitle: 'أخلاقيات المهنة',
     totalHours: 10,
     coefficient: 1,
@@ -97,15 +96,15 @@ export const MODULES: (Module & { coefficient: number })[] = [
   },
   { 
     id: 8, 
-    title: 'التقويم والمعالجة البيداغوجية', 
-    shortTitle: 'التقويم',
+    title: 'التقييم والمعالجة البيداغوجية', 
+    shortTitle: 'التقييم',
     totalHours: 25,
     coefficient: 2,
     description: 'مفهوم التقويم وأنواعه، بناء الاختبارات، تحليل النتائج، المعالجة البيداغوجية، والمخططات السنوية للتقويم.'
   },
   { 
     id: 9, 
-    title: 'هندسة التكوين', 
+    title: ' هندسة التكوين والبيداغوجيا', 
     shortTitle: 'هندسة التكوين',
     totalHours: 10,
     coefficient: 1,
@@ -113,8 +112,8 @@ export const MODULES: (Module & { coefficient: number })[] = [
   },
   { 
     id: 10, 
-    title: 'الإعلام الآلي وتكنولوجيا التعليم', 
-    shortTitle: 'تكنولوجيا التعليم',
+    title: 'الإعلام الآلي وتكنولوجيا الاعلام و الاتصال', 
+    shortTitle: 'الاعلام الآلي ',
     totalHours: 25,
     coefficient: 1,
     description: 'إدماج التكنولوجيات الحديثة، الرقمنة، واستخدام البرمجيات المكتبية (Word, Excel, PPT) في التعليم.'

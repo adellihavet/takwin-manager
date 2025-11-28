@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SESSIONS, SPECIALTIES as DEFAULT_SPECIALTIES, MODULES, CORRECTED_DISTRIBUTION } from '../constants';
 import { getWorkingDays, formatDate } from '../utils';
 import { Specialty, GroupSchedule, TrainerConfig, TrainerAssignment, Module, InstitutionConfig } from '../types';
-import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText, BarChart3, ShieldCheck, XCircle } from 'lucide-react';
+import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText, BarChart3 } from 'lucide-react';
 
 const TimetableGenerator: React.FC = () => {
   // State
@@ -147,21 +147,6 @@ const TimetableGenerator: React.FC = () => {
         const surplusHours = Math.max(0, sessionTotalHours - totalCurriculumHours);
         if (surplusHours > 0) moduleRequirements[REVISION_MOD_ID] = surplusHours;
 
-        // --- NEW: INSTRUCTOR PERSISTENCE MAP ---
-        // Build a map of "Group + Module" -> "TrainerKey" from PREVIOUS SESSIONS
-        // This ensures if Group 1 had Trainer A for Module 1 in Session 1, they keep them in Session 2.
-        const persistenceMap = new Map<string, string>();
-        trainerAssignments.forEach(assign => {
-            // We verify against current session to treat it as "History"
-            if (assign.sessionId !== selectedSessionId) {
-                const uniqueKey = `${assign.groupId}-${assign.moduleId}`;
-                // Only set if not already set (First assignment usually is the main one)
-                if (!persistenceMap.has(uniqueKey)) {
-                    persistenceMap.set(uniqueKey, assign.trainerKey);
-                }
-            }
-        });
-
         const MAX_RETRIES = 50; 
         
         for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -198,45 +183,24 @@ const TimetableGenerator: React.FC = () => {
             const availableModules: Module[] = [...MODULES];
             if (surplusHours > 0) availableModules.push({ id: REVISION_MOD_ID, title: 'Rev', shortTitle: 'Rev', totalHours: 0 });
 
-            // --- ASSIGNMENT LOGIC WITH PERSISTENCE CHECK ---
             availableModules.forEach(m => {
                 if (m.id === REVISION_MOD_ID) {
                     allGroups.forEach(g => assignmentsMap[g.globalId][m.id] = `SUP-${g.globalId}`);
+                } else if (m.id === 1) {
+                    specialties.forEach(spec => {
+                        const trainers = getTrainerKeys(1, spec.id);
+                        const specGroups = allGroups.filter(g => g.specialtyId === spec.id);
+                        specGroups.forEach((g, idx) => {
+                            const offset = attempt; 
+                            assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
+                        });
+                    });
                 } else {
-                    // Logic for Academic Modules
-                    if (m.id === 1) {
-                        specialties.forEach(spec => {
-                            const trainers = getTrainerKeys(1, spec.id);
-                            const specGroups = allGroups.filter(g => g.specialtyId === spec.id);
-                            
-                            specGroups.forEach((g, idx) => {
-                                // 1. Check History First
-                                const historyKey = `${g.globalId}-${m.id}`;
-                                if (persistenceMap.has(historyKey)) {
-                                    // FORCE SAME TRAINER
-                                    assignmentsMap[g.globalId][m.id] = persistenceMap.get(historyKey)!;
-                                } else {
-                                    // 2. New Assignment (Round Robin)
-                                    const offset = attempt; 
-                                    assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
-                                }
-                            });
-                        });
-                    } else {
-                        const trainers = getTrainerKeys(m.id, '');
-                        allGroups.forEach((g, idx) => {
-                            // 1. Check History First
-                            const historyKey = `${g.globalId}-${m.id}`;
-                            if (persistenceMap.has(historyKey)) {
-                                // FORCE SAME TRAINER
-                                assignmentsMap[g.globalId][m.id] = persistenceMap.get(historyKey)!;
-                            } else {
-                                // 2. New Assignment (Round Robin)
-                                const offset = attempt;
-                                assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
-                            }
-                        });
-                    }
+                    const trainers = getTrainerKeys(m.id, '');
+                    allGroups.forEach((g, idx) => {
+                        const offset = attempt;
+                        assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
+                    });
                 }
             });
 
@@ -557,94 +521,6 @@ const TimetableGenerator: React.FC = () => {
       });
 
       return getBalancedGroupPages(days); 
-  };
-
-  // --- VERIFICATION MATRIX RENDERING ---
-  const renderVerificationMatrix = () => {
-      if (trainerAssignments.length === 0) return null;
-
-      // Group IDs extraction
-      const groups: { specId: string, groupNum: number, globalId: string }[] = [];
-      specialties.forEach(s => {
-          for(let i=1; i<=s.groups; i++) groups.push({ specId: s.id, groupNum: i, globalId: `${s.id}-${i}` });
-      });
-
-      return (
-          <div className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 p-6 mt-12 print:hidden">
-              <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-4">
-                  <ShieldCheck className="w-6 h-6 text-emerald-400" />
-                  <h3 className="text-xl font-bold text-white">مصفوفة التحقق من ثبات الإسناد</h3>
-              </div>
-              
-              <div className="overflow-x-auto max-h-[500px] custom-scrollbar">
-                  <table className="w-full text-right text-sm">
-                      <thead className="bg-slate-950 text-slate-300 sticky top-0 z-10">
-                          <tr>
-                              <th className="p-3">الفوج</th>
-                              <th className="p-3">المقياس</th>
-                              <th className="p-3 text-center border-l border-slate-800">أستاذ الدورة 1</th>
-                              <th className="p-3 text-center border-l border-slate-800">أستاذ الدورة 2</th>
-                              <th className="p-3 text-center border-l border-slate-800">أستاذ الدورة 3</th>
-                              <th className="p-3 text-center">الحالة</th>
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                          {groups.map((group) => (
-                              <React.Fragment key={group.globalId}>
-                                  {MODULES.map((module) => {
-                                      // Get trainer for each session
-                                      const getT = (sId: number) => {
-                                          const a = trainerAssignments.find(ass => ass.sessionId === sId && ass.groupId === group.globalId && ass.moduleId === module.id);
-                                          if (!a) return null;
-                                          const name = module.id === 1 
-                                              ? trainerConfig[1]?.names?.[a.trainerKey] 
-                                              : trainerConfig[module.id]?.names?.[a.trainerKey];
-                                          return { key: a.trainerKey, name: name || a.trainerKey };
-                                      };
-
-                                      const t1 = getT(1);
-                                      const t2 = getT(2);
-                                      const t3 = getT(3);
-
-                                      // Skip if no assignments at all (unlikely if generated)
-                                      if (!t1 && !t2 && !t3) return null;
-
-                                      // Check consistency
-                                      let status: 'ok' | 'warn' | 'error' = 'ok';
-                                      if (t1 && t2 && t1.key !== t2.key) status = 'error';
-                                      if (t2 && t3 && t2.key !== t3.key) status = 'error';
-                                      if (t1 && t3 && t1.key !== t3.key) status = 'error';
-
-                                      return (
-                                          <tr key={`${group.globalId}-${module.id}`} className="hover:bg-slate-800/30">
-                                              {/* Only show group name for the first module row, but simplicity dictates showing it small or repeated */}
-                                              <td className="p-3 text-xs text-slate-400">
-                                                  {specialties.find(s=>s.id===group.specId)?.name} - ف{group.groupNum}
-                                              </td>
-                                              <td className="p-3 font-bold text-white">{module.shortTitle}</td>
-                                              <td className="p-3 text-center text-xs text-slate-300 border-l border-slate-800">{t1?.name || '-'}</td>
-                                              <td className="p-3 text-center text-xs text-slate-300 border-l border-slate-800">{t2?.name || '-'}</td>
-                                              <td className="p-3 text-center text-xs text-slate-300 border-l border-slate-800">{t3?.name || '-'}</td>
-                                              <td className="p-3 text-center">
-                                                  {status === 'ok' ? (
-                                                      <CheckCircle2 className="w-5 h-5 text-emerald-500 mx-auto" />
-                                                  ) : (
-                                                      <div className="flex items-center justify-center gap-1 text-red-400 font-bold text-xs">
-                                                          <XCircle className="w-4 h-4" /> عدم تطابق
-                                                      </div>
-                                                  )}
-                                              </td>
-                                          </tr>
-                                      );
-                                  })}
-                                  <tr className="bg-slate-800/50 h-2"><td colSpan={6}></td></tr>
-                              </React.Fragment>
-                          ))}
-                      </tbody>
-                  </table>
-              </div>
-          </div>
-      );
   };
 
   return (
@@ -1184,10 +1060,7 @@ const TimetableGenerator: React.FC = () => {
                     ))}
                 </div>
 
-                {/* 3. VERIFICATION MATRIX - NEW */}
-                {renderVerificationMatrix()}
-
-                {/* 4. VALIDATION STATS - RESTORED */}
+                {/* 3. VALIDATION STATS - RESTORED */}
                 <div className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 p-6 mt-8">
                     <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-4">
                         <BarChart3 className="w-6 h-6 text-emerald-400" />
