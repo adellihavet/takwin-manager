@@ -294,10 +294,10 @@ const DataAnalytics: React.FC = () => {
 
           {/* KPI CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <KPICard title="إجمالي العينة" value={analytics.total} icon={<Users className="text-blue-400" />} sub="متربص" color="blue" />
+              <KPICard title="إجمالي المتكونين" value={analytics.total} icon={<Users className="text-blue-400" />} sub="متربص" color="blue" />
               <KPICard title="معدل الذكور" value={analytics.maleStats.avgGrade.toFixed(2)} icon={<UserCheck className="text-sky-400" />} sub={`نجاح: ${Math.round(analytics.maleStats.passRate)}%`} color="sky" />
               <KPICard title="معدل الإناث" value={analytics.femaleStats.avgGrade.toFixed(2)} icon={<UserCheck className="text-pink-400" />} sub={`نجاح: ${Math.round(analytics.femaleStats.passRate)}%`} color="pink" />
-              <KPICard title="الفجوة الجندرية" value={Math.abs(analytics.maleStats.avgGrade - analytics.femaleStats.avgGrade).toFixed(2)} icon={<Activity className="text-purple-400" />} sub="نقطة فرق" color="purple" />
+              <KPICard title="الفجوة بين الجنسين" value={Math.abs(analytics.maleStats.avgGrade - analytics.femaleStats.avgGrade).toFixed(2)} icon={<Activity className="text-purple-400" />} sub="نقطة فرق" color="purple" />
           </div>
       </div>
 
