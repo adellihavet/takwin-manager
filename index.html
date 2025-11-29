@@ -35,6 +35,11 @@
       }
     </script>
     <style>
+      /* HIDE PRINT SECTION ON SCREEN ALWAYS */
+      #print-section {
+        display: none;
+      }
+
       @media print {
         body * {
           visibility: hidden;
@@ -43,6 +48,7 @@
           visibility: visible;
         }
         #print-section {
+          display: block !important;
           position: absolute;
           left: 0;
           top: 0;

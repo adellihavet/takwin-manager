@@ -336,7 +336,7 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
                     ));
                 })()}
 
-                {/* 3. PROCTOR CONVOCATION CARDS (Improved Layout) */}
+                {/* 3. PROCTOR CONVOCATION CARDS */}
                 {selectedPrintDoc === 'proctor_individual' && (() => {
                     const allProctors = getAllProctorNames();
                     const activeProctors = allProctors.filter(name => proctorAssignments.some(p => p.proctor1 === name || p.proctor2 === name));
@@ -347,15 +347,15 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
                         <div key={pageIndex} className="page-break" style={{ 
                             direction: 'rtl', 
                             width: '100%', 
-                            maxWidth: '190mm', // Safe width for A4
-                            height: '270mm', // Safe height
+                            maxWidth: '190mm',
+                            height: '270mm',
                             margin: '0 auto', 
                             boxSizing: 'border-box',
                             display: 'grid',
                             gridTemplateColumns: '1fr 1fr',
                             gridTemplateRows: '1fr 1fr',
                             gap: '5mm',
-                            padding: '0mm', // Remove padding to maximize space
+                            padding: '0mm',
                             pageBreakAfter: 'always'
                         }}>
                             {chunk.map((proctorName, idx) => {
@@ -451,7 +451,7 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
                     </div>
                 )}
 
-                {/* 5. CONDUCT PV */}
+                {/* 5. CONDUCT PV (RESTORED MISSING SECTIONS) */}
                 {selectedPrintDoc === 'pv_conduct' && selectedPrintExam && (
                     <div className="space-y-12">
                         {(selectedPrintRoom ? [examRooms.find(r => r.id === selectedPrintRoom)!] : examRooms).map(room => {
@@ -463,30 +463,81 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
                                         <div className="text-center mb-4">
                                             <h4 className="font-bold">الجمهورية الجزائرية الديمقراطية الشعبية</h4>
                                             <h4 className="font-bold">وزارة التربية الوطنية</h4>
-                                            <div className="flex justify-between text-sm font-bold mt-2">
+                                            <div className="flex justify-between text-sm font-bold mt-2 border-t border-black pt-2">
                                                 <span>مديرية التربية لولاية: {institution.wilaya}</span>
                                                 <span>مركز التكوين: {institution.center}</span>
                                             </div>
                                         </div>
-                                        <h1 className="text-2xl font-black text-center border-2 border-black py-2 mb-4 bg-gray-100">محضر سير الامتحانات الكتابية</h1>
-                                        <div className="mb-4 font-bold flex flex-wrap gap-4 justify-between border-b pb-2">
+                                        
+                                        <h1 className="text-2xl font-black text-center border-4 border-double border-black py-2 mb-6 bg-gray-50">محضر سير الامتحانات الكتابية</h1>
+                                        
+                                        <div className="mb-6 font-bold flex flex-wrap gap-4 justify-between border-b-2 border-black pb-2 text-lg">
                                             <span>التاريخ: {exam.date}</span>
                                             <span>التوقيت: {formatTimeDisplay(exam.startTime)} إلى {formatTimeDisplay(exam.endTime)}</span>
-                                            <span>القاعة: {room.id}</span>
+                                            <span className="bg-black text-white px-4 rounded">القاعة: {room.id}</span>
                                         </div>
+                                        
+                                        {/* 1. Statistics */}
+                                        <h3 className="font-bold underline mb-2 text-sm">1. إحصائيات:</h3>
                                         <table className="w-full border-2 border-black text-center mb-6">
-                                            <thead><tr className="bg-gray-200"><th className="border border-black p-2">المقياس</th><th className="border border-black p-2">المسجلون</th><th className="border border-black p-2">الحاضرون</th><th className="border border-black p-2">الغائبون</th></tr></thead>
-                                            <tbody><tr><td className="border border-black p-2 font-bold">{MODULES.find(m => m.id === exam.moduleId)?.title}</td><td className="border border-black p-2">{room.trainees.length}</td><td className="border border-black p-2">...</td><td className="border border-black p-2">...</td></tr></tbody>
+                                            <thead><tr className="bg-gray-200"><th className="border border-black p-2">المقياس</th><th className="border border-black p-2">عدد المسجلين</th><th className="border border-black p-2">عدد الحاضرين</th><th className="border border-black p-2">عدد الغائبين</th></tr></thead>
+                                            <tbody><tr><td className="border border-black p-2 font-bold">{MODULES.find(m => m.id === exam.moduleId)?.title}</td><td className="border border-black p-2 font-bold">{room.trainees.length}</td><td className="border border-black p-2">...</td><td className="border border-black p-2">...</td></tr></tbody>
                                         </table>
-                                        <h3 className="font-bold underline mb-2">الحراسة:</h3>
-                                        <table className="w-full border border-black text-center text-sm mb-8">
-                                            <thead><tr className="bg-gray-200"><th className="border border-black p-1 w-10">#</th><th className="border border-black p-1">اللقب والاسم</th><th className="border border-black p-1 w-32">الإمضاء</th></tr></thead>
+                                        
+                                        {/* 2. Proctors */}
+                                        <h3 className="font-bold underline mb-2 text-sm">2. الأساتذة الحراس:</h3>
+                                        <table className="w-full border border-black text-center text-sm mb-6">
+                                            <thead><tr className="bg-gray-200"><th className="border border-black p-1 w-10">#</th><th className="border border-black p-1">اللقب والاسم</th><th className="border border-black p-1 w-40">الإمضاء</th></tr></thead>
                                             <tbody>
-                                                <tr><td className="border border-black p-2">1</td><td className="border border-black p-2 font-bold">{assign.proctor1}</td><td className="border border-black p-2"></td></tr>
-                                                <tr><td className="border border-black p-2">2</td><td className="border border-black p-2 font-bold">{assign.proctor2}</td><td className="border border-black p-2"></td></tr>
+                                                <tr className="h-10"><td className="border border-black p-2">1</td><td className="border border-black p-2 font-bold text-right px-4">{assign.proctor1}</td><td className="border border-black p-2"></td></tr>
+                                                <tr className="h-10"><td className="border border-black p-2">2</td><td className="border border-black p-2 font-bold text-right px-4">{assign.proctor2}</td><td className="border border-black p-2"></td></tr>
                                             </tbody>
                                         </table>
-                                        <div className="mt-8 text-left pl-8 font-bold text-lg">المدير البيداغوجي</div>
+
+                                        {/* 3. Absentees List (RESTORED) */}
+                                        <h3 className="font-bold underline mb-2 text-sm">3. قائمة المتربصين الغائبين:</h3>
+                                        <table className="w-full border border-black text-center text-sm mb-6">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="border border-black p-1 w-12">رقم</th>
+                                                    <th className="border border-black p-1">اللقب والاسم</th>
+                                                    <th className="border border-black p-1 w-40">رقم التسجيل (إن وجد)</th>
+                                                    <th className="border border-black p-1 w-1/3">سبب الغياب / ملاحظة</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {[1, 2, 3].map(i => (
+                                                    <tr key={i} className="h-8">
+                                                        <td className="border border-black bg-gray-50"></td>
+                                                        <td className="border border-black"></td>
+                                                        <td className="border border-black"></td>
+                                                        <td className="border border-black"></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+
+                                        {/* 4. Observations Report (RESTORED) */}
+                                        <div className="border-2 border-black p-3 mb-8 min-h-[100px] relative">
+                                            <h3 className="font-bold underline mb-2 text-sm bg-white px-2 absolute -top-3 right-4">4. تقرير سير الاختبار (الملاحظات):</h3>
+                                            <p className="leading-9 text-sm font-medium mt-2 text-justify px-2">
+                                                سار الاختبار في ظروف: ......................................................................................................................................
+                                                ..........................................................................................................................................................................
+                                                ..........................................................................................................................................................................
+                                                ..........................................................................................................................................................................
+                                            </p>
+                                        </div>
+
+                                        {/* Footer */}
+                                        <div className="flex justify-between px-12 font-bold text-lg mt-auto">
+                                            <div className="text-center">
+                                                <p className="mb-12">الأساتذة الحراس</p>
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="mb-12">المدير البيداغوجي</p>
+                                                <p className="text-sm font-normal">...........................</p>
+                                            </div>
+                                        </div>
                                 </div>
                             );
                         })}

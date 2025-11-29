@@ -13,6 +13,8 @@ import DataAnalytics from './components/DataAnalytics';
 import OnboardingTour from './components/OnboardingTour';
 import SmartHelpTooltip from './components/SmartHelpTooltip';
 import TakwinChatbot from './components/TakwinChatbot';
+import PrintGuide from './components/PrintGuide'; 
+import PrivacyBanner from './components/PrivacyBanner';
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -24,13 +26,15 @@ import {
   Edit3, 
   HelpCircle, 
   Calculator, 
-  BarChart2 
+  BarChart2,
+  Printer 
 } from 'lucide-react';
 
 function App() {
   // --- STATE MANAGEMENT ---
   const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'schedule' | 'timetable' | 'editor' | 'summary' | 'trainees' | 'evaluation' | 'analytics' | 'certificates'>('dashboard');
   const [isTourOpen, setIsTourOpen] = useState(false);
+  const [isPrintGuideOpen, setIsPrintGuideOpen] = useState(false);
 
   // --- EFFECTS ---
   
@@ -42,7 +46,7 @@ function App() {
     }
   }, []);
 
-  // 2. Scroll to top when tab changes (UX Improvement)
+  // 2. Scroll to top when tab changes
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeTab]);
@@ -62,8 +66,10 @@ function App() {
       
       {/* --- GLOBAL OVERLAYS --- */}
       <OnboardingTour isOpen={isTourOpen} onClose={() => setIsTourOpen(false)} />
+      <PrintGuide isOpen={isPrintGuideOpen} onClose={() => setIsPrintGuideOpen(false)} />
       <SmartHelpTooltip />
       <TakwinChatbot />
+      <PrivacyBanner />
 
       {/* --- HEADER & NAVIGATION --- */}
       <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 print:hidden">
@@ -138,13 +144,23 @@ function App() {
                   </button>
                 </nav>
 
-                <button 
-                  onClick={() => setIsTourOpen(true)} 
-                  className="p-2 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full border border-slate-700 transition-colors shadow-sm" 
-                  title="دليل الاستخدام"
-                >
-                    <HelpCircle className="w-5 h-5" />
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setIsPrintGuideOpen(true)}
+                    className="p-2 bg-blue-600 text-white hover:bg-blue-500 rounded-full border border-blue-500 transition-colors shadow-sm" 
+                    title="نصائح الطباعة"
+                  >
+                      <Printer className="w-5 h-5" />
+                  </button>
+
+                  <button 
+                    onClick={() => setIsTourOpen(true)} 
+                    className="p-2 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full border border-slate-700 transition-colors shadow-sm" 
+                    title="دليل الاستخدام"
+                  >
+                      <HelpCircle className="w-5 h-5" />
+                  </button>
+                </div>
             </div>
           </div>
         </div>

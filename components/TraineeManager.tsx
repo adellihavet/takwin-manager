@@ -135,7 +135,7 @@ const TraineeManager: React.FC = () => {
     // --- Auto Grouping (Batch) ---
     const handleAutoGrouping = () => {
         if (trainees.length === 0) return;
-        if (!window.confirm("سيقوم النظام بترتيب المتربصين أبجدياً وتوزيعهم بالتساوي (Round Robin) على عدد الأفواج المحدد لكل تخصص.\nهل تريد المتابعة؟")) return;
+        if (!window.confirm("سيقوم النظام بترتيب المتربصين أبجدياً وتوزيعهم بالتساوي على عدد الأفواج المحدد لكل تخصص.\nهل تريد المتابعة؟")) return;
 
         const updatedTrainees = [...trainees];
         let reportMsg = "تم توزيع الأفواج بنجاح:\n------------------\n";
@@ -160,7 +160,7 @@ const TraineeManager: React.FC = () => {
                     const mainIndex = updatedTrainees.findIndex(x => x.id === t.id);
                     if (mainIndex !== -1) updatedTrainees[mainIndex].groupId = groupNum;
                 });
-                reportMsg += `\n📌 ${spec.name} (${specTrainees.length} / ${groupCount} أفواج):\n`;
+                reportMsg += `\n ${spec.name} (${specTrainees.length} / ${groupCount} أفواج):\n`;
                 for(let g=1; g<=groupCount; g++) reportMsg += `   - فوج ${g}: ${distribution[g] || 0}\n`;
             }
         });
