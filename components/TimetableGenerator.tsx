@@ -147,20 +147,36 @@ const TimetableGenerator: React.FC = () => {
         const surplusHours = Math.max(0, sessionTotalHours - totalCurriculumHours);
         if (surplusHours > 0) moduleRequirements[REVISION_MOD_ID] = surplusHours;
 
-        // --- NEW: INSTRUCTOR PERSISTENCE MAP ---
-        // Build a map of "Group + Module" -> "TrainerKey" from PREVIOUS SESSIONS
-        // This ensures if Group 1 had Trainer A for Module 1 in Session 1, they keep them in Session 2.
+        // --- INSTRUCTOR PERSISTENCE MAP ---
         const persistenceMap = new Map<string, string>();
         trainerAssignments.forEach(assign => {
-            // We verify against current session to treat it as "History"
             if (assign.sessionId !== selectedSessionId) {
                 const uniqueKey = `${assign.groupId}-${assign.moduleId}`;
-                // Only set if not already set (First assignment usually is the main one)
                 if (!persistenceMap.has(uniqueKey)) {
                     persistenceMap.set(uniqueKey, assign.trainerKey);
                 }
             }
         });
+
+        // --- HELPER: GET TRAINER IDENTITY (NAME-BASED) ---
+        // This is the core fix. It resolves the Trainer Key to a Real Name.
+        // If "Ahmed" is assigned to Mod 1 and Mod 2, this function returns "NAME:Ahmed" for both.
+        // This allows checking if "Ahmed" is busy regardless of which module he is teaching.
+        const getTrainerIdentity = (modId: number, tKey: string) => {
+            if (modId === REVISION_MOD_ID) return `REV-${tKey}`;
+            
+            // Get Config Context
+            const conf = modId === 1 ? trainerConfig[1] : trainerConfig[modId];
+            
+            // Try to find the name
+            const name = conf?.names?.[tKey]?.trim();
+            
+            // If name is found and valid, use it as the unique identity
+            if (name && name.length > 1) return `NAME:${name.toLowerCase()}`;
+            
+            // Fallback to Abstract Key if no name is provided
+            return `ID:${modId}-${tKey}`;
+        };
 
         const MAX_RETRIES = 50; 
         
@@ -198,25 +214,21 @@ const TimetableGenerator: React.FC = () => {
             const availableModules: Module[] = [...MODULES];
             if (surplusHours > 0) availableModules.push({ id: REVISION_MOD_ID, title: 'Rev', shortTitle: 'Rev', totalHours: 0 });
 
-            // --- ASSIGNMENT LOGIC WITH PERSISTENCE CHECK ---
+            // --- ASSIGNMENT LOGIC ---
             availableModules.forEach(m => {
                 if (m.id === REVISION_MOD_ID) {
                     allGroups.forEach(g => assignmentsMap[g.globalId][m.id] = `SUP-${g.globalId}`);
                 } else {
-                    // Logic for Academic Modules
                     if (m.id === 1) {
                         specialties.forEach(spec => {
                             const trainers = getTrainerKeys(1, spec.id);
                             const specGroups = allGroups.filter(g => g.specialtyId === spec.id);
                             
                             specGroups.forEach((g, idx) => {
-                                // 1. Check History First
                                 const historyKey = `${g.globalId}-${m.id}`;
                                 if (persistenceMap.has(historyKey)) {
-                                    // FORCE SAME TRAINER
                                     assignmentsMap[g.globalId][m.id] = persistenceMap.get(historyKey)!;
                                 } else {
-                                    // 2. New Assignment (Round Robin)
                                     const offset = attempt; 
                                     assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
                                 }
@@ -225,13 +237,10 @@ const TimetableGenerator: React.FC = () => {
                     } else {
                         const trainers = getTrainerKeys(m.id, '');
                         allGroups.forEach((g, idx) => {
-                            // 1. Check History First
                             const historyKey = `${g.globalId}-${m.id}`;
                             if (persistenceMap.has(historyKey)) {
-                                // FORCE SAME TRAINER
                                 assignmentsMap[g.globalId][m.id] = persistenceMap.get(historyKey)!;
                             } else {
-                                // 2. New Assignment (Round Robin)
                                 const offset = attempt;
                                 assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
                             }
@@ -271,19 +280,29 @@ const TimetableGenerator: React.FC = () => {
                     for (let h = 0; h < 5; h++) {
                         if (selectedSessionId === 3 && dayIdx > 0 && h >= 4) continue;
 
-                        const busyTrainers = new Set<string>();
+                        // IMPORTANT: We use a set of Occupied IDENTITIES (Names) not just IDs
+                        const busyIdentities = new Set<string>();
+                        
                         const shuffledGroups = [...allGroups].sort(() => Math.random() - 0.5);
 
                         for (const g of shuffledGroups) {
                             const gId = g.globalId;
                             
                             const candidates = availableModules.filter(m => {
+                                // 1. Check Remaining Hours
                                 if ((remainingHours[gId][m.id] || 0) <= 0) return false;
-                                const trainer = assignmentsMap[gId][m.id];
-                                const key = `${m.id}-${trainer}`;
-                                if (busyTrainers.has(key)) return false;
+                                
+                                // 2. Check Trainer Availability (By NAME)
+                                const trainerKey = assignmentsMap[gId][m.id];
+                                const identity = getTrainerIdentity(m.id, trainerKey);
+                                
+                                // If "Name:Ahmed" is already busy teaching ANY module, we skip
+                                if (busyIdentities.has(identity)) return false;
+                                
+                                // 3. Check Daily Limit (Max 2 hours per module per day)
                                 const usedToday = dailyModuleUsage[gId][m.id] || 0;
                                 if (usedToday >= 2) return false;
+                                
                                 return true;
                             });
 
@@ -300,8 +319,9 @@ const TimetableGenerator: React.FC = () => {
                             remainingHours[gId][m.id] -= duration;
                             dailyModuleUsage[gId][m.id] = (dailyModuleUsage[gId][m.id] || 0) + duration;
 
-                            const trainer = assignmentsMap[gId][m.id];
-                            busyTrainers.add(`${m.id}-${trainer}`);
+                            const trainerKey = assignmentsMap[gId][m.id];
+                            const identity = getTrainerIdentity(m.id, trainerKey);
+                            busyIdentities.add(identity);
                             
                             currentGroupSchedules[gId].days[dayIdx].slots.push({
                                 time: `${8+h}:00 - ${9+h}:00`,
@@ -311,7 +331,7 @@ const TimetableGenerator: React.FC = () => {
                             
                             currentAssignmentsList.push({
                                 moduleId: m.id,
-                                trainerKey: trainer,
+                                trainerKey: trainerKey,
                                 groupId: gId,
                                 dayIndex: dayIdx,
                                 hourIndex: h,
@@ -335,17 +355,15 @@ const TimetableGenerator: React.FC = () => {
 
                 if (!daySuccess) {
                     attemptFailed = true;
-                    // Analyze why it failed
                     const neededModules: Record<number, number> = {};
                     allGroups.forEach(g => {
                         Object.entries(remainingHours[g.globalId]).forEach(([mId, hrs]) => {
                             if (hrs > 0) neededModules[parseInt(mId)] = (neededModules[parseInt(mId)] || 0) + hrs;
                         });
                     });
-                    // Find max
                     const worstModuleId = Object.keys(neededModules).reduce((a, b) => neededModules[parseInt(a)] > neededModules[parseInt(b)] ? a : b, "1");
                     const modName = getModuleName(parseInt(worstModuleId));
-                    bestFailureReason = `تعذر إكمال التوزيع. العائق الأكبر هو مقياس "${modName}". يرجى إضافة أساتذة لهذا المقياس لتخفيف الضغط.`;
+                    bestFailureReason = `تعذر إكمال التوزيع بسبب ضغط التوقيت على الأساتذة (خاصة في مقياس ${modName}). يرجى التحقق من الأسماء المكررة أو زيادة عدد الأساتذة.`;
                     break; 
                 }
             }
@@ -358,7 +376,7 @@ const TimetableGenerator: React.FC = () => {
         }
 
         if (bestSchedule.length === 0) {
-             alert(bestFailureReason || "تعذر توليد جدول مثالي. يرجى زيادة عدد الأساتذة أو تقليل القيود.");
+             alert(bestFailureReason || "تعذر توليد جدول مثالي. تأكد من أنك لم تسند مقاييس كثيرة لنفس الأستاذ بشكل يجعل التوزيع مستحيلاً.");
              setIsGenerating(false);
              return;
         }
@@ -397,7 +415,7 @@ const TimetableGenerator: React.FC = () => {
         localStorage.setItem('takwin_schedule', JSON.stringify(finalSchedule));
         localStorage.setItem('takwin_assignments', JSON.stringify(finalAssignments));
         
-        alert(`تم توليد وحفظ توزيع ${currentSession.name} بنجاح!`);
+        alert(`تم توليد وحفظ توزيع ${currentSession.name} بنجاح!\n(تم مراعاة الأساتذة الذين يدرسون أكثر من مقياس)`);
 
     } catch (err) {
         console.error("Gen Error", err);
