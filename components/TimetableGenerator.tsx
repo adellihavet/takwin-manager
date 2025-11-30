@@ -3,7 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SESSIONS, SPECIALTIES as DEFAULT_SPECIALTIES, MODULES, CORRECTED_DISTRIBUTION } from '../constants';
 import { getWorkingDays, formatDate } from '../utils';
 import { Specialty, GroupSchedule, TrainerConfig, TrainerAssignment, Module, InstitutionConfig } from '../types';
-import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText, BarChart3, ShieldCheck, XCircle } from 'lucide-react';
+import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText, BarChart3, ShieldCheck, XCircle, Table2, Edit3 } from 'lucide-react';
+import TrainerAttribution from './TrainerAttribution';
+import TimetableEditor from './TimetableEditor';
 
 const TimetableGenerator: React.FC = () => {
   // State
@@ -25,6 +27,9 @@ const TimetableGenerator: React.FC = () => {
   const [printMode, setPrintMode] = useState<'none' | 'group' | 'trainer'>('none');
   const [printTarget, setPrintTarget] = useState<string>(''); // GroupId or TrainerKey
   
+  // NEW STATE: Active Tab (Generator vs Editor vs Attribution)
+  const [activeTab, setActiveTab] = useState<'generator' | 'editor' | 'attribution'>('generator');
+
   // Stats
   const [generationStats, setGenerationStats] = useState<{moduleId: number, required: number, scheduled: number}[]>([]);
 
@@ -116,6 +121,7 @@ const TimetableGenerator: React.FC = () => {
         let bestAssignments: TrainerAssignment[] = [];
         let bestFailureReason = "";
         
+        // --- 1. Prepare All Groups ---
         let allGroups: { globalId: string, specialtyId: string, localId: number }[] = [];
         specialties.forEach(spec => {
           for (let i = 1; i <= spec.groups; i++) {
@@ -127,6 +133,7 @@ const TimetableGenerator: React.FC = () => {
           }
         });
 
+        // --- 2. Calculate Module Requirements ---
         const moduleRequirements: Record<number, number> = {};
         let totalCurriculumHours = 0;
         CORRECTED_DISTRIBUTION.forEach(d => {
@@ -147,36 +154,40 @@ const TimetableGenerator: React.FC = () => {
         const surplusHours = Math.max(0, sessionTotalHours - totalCurriculumHours);
         if (surplusHours > 0) moduleRequirements[REVISION_MOD_ID] = surplusHours;
 
-        // --- INSTRUCTOR PERSISTENCE MAP ---
-        const persistenceMap = new Map<string, string>();
-        trainerAssignments.forEach(assign => {
-            if (assign.sessionId !== selectedSessionId) {
-                const uniqueKey = `${assign.groupId}-${assign.moduleId}`;
-                if (!persistenceMap.has(uniqueKey)) {
-                    persistenceMap.set(uniqueKey, assign.trainerKey);
-                }
+        // --- HELPER: GET TRAINER KEYS ---
+        const getTrainerKeys = (modId: number, specId: string) => {
+            if (modId === REVISION_MOD_ID) return ["SUPERVISOR"];
+            const keys: string[] = [];
+            if (modId === 1) {
+                const count = trainerConfig[1]?.specialtyCounts?.[specId] || 1;
+                for(let i=1; i<=count; i++) keys.push(`${specId}-${i}`);
+            } else {
+                const count = trainerConfig[modId]?.generalCount || 1;
+                for(let i=1; i<=count; i++) keys.push(i.toString());
             }
-        });
+            return keys;
+        };
 
         // --- HELPER: GET TRAINER IDENTITY (NAME-BASED) ---
-        // This is the core fix. It resolves the Trainer Key to a Real Name.
-        // If "Ahmed" is assigned to Mod 1 and Mod 2, this function returns "NAME:Ahmed" for both.
-        // This allows checking if "Ahmed" is busy regardless of which module he is teaching.
         const getTrainerIdentity = (modId: number, tKey: string) => {
             if (modId === REVISION_MOD_ID) return `REV-${tKey}`;
-            
-            // Get Config Context
             const conf = modId === 1 ? trainerConfig[1] : trainerConfig[modId];
-            
-            // Try to find the name
             const name = conf?.names?.[tKey]?.trim();
-            
-            // If name is found and valid, use it as the unique identity
             if (name && name.length > 1) return `NAME:${name.toLowerCase()}`;
-            
-            // Fallback to Abstract Key if no name is provided
             return `ID:${modId}-${tKey}`;
         };
+
+        // --- HELPER: HISTORY CHECK (STABILITY) ---
+        // Look for ANY previous assignment for this group+module in other sessions
+        const persistenceMap = new Map<string, string>();
+        trainerAssignments.forEach(assign => {
+            // We ignore session ID here because if they taught this group in S1, 
+            // we want them to teach it in S2 and S3 as well.
+            const uniqueKey = `${assign.groupId}-${assign.moduleId}`;
+            if (!persistenceMap.has(uniqueKey)) {
+                persistenceMap.set(uniqueKey, assign.trainerKey);
+            }
+        });
 
         const MAX_RETRIES = 50; 
         
@@ -195,60 +206,72 @@ const TimetableGenerator: React.FC = () => {
                 remainingHours[g.globalId] = { ...moduleRequirements };
             });
 
+            // --- 3. HYBRID ASSIGNMENT LOGIC (Stability + Fairness with Cap) ---
             const assignmentsMap: Record<string, Record<number, string>> = {};
             allGroups.forEach(g => assignmentsMap[g.globalId] = {});
-
-            const getTrainerKeys = (modId: number, specId: string) => {
-                if (modId === REVISION_MOD_ID) return ["SUPERVISOR"];
-                const keys: string[] = [];
-                if (modId === 1) {
-                    const count = trainerConfig[1]?.specialtyCounts?.[specId] || 1;
-                    for(let i=1; i<=count; i++) keys.push(`${specId}-${i}`);
-                } else {
-                    const count = trainerConfig[modId]?.generalCount || 1;
-                    for(let i=1; i<=count; i++) keys.push(i.toString());
-                }
-                return keys;
-            };
 
             const availableModules: Module[] = [...MODULES];
             if (surplusHours > 0) availableModules.push({ id: REVISION_MOD_ID, title: 'Rev', shortTitle: 'Rev', totalHours: 0 });
 
-            // --- ASSIGNMENT LOGIC ---
             availableModules.forEach(m => {
                 if (m.id === REVISION_MOD_ID) {
                     allGroups.forEach(g => assignmentsMap[g.globalId][m.id] = `SUP-${g.globalId}`);
                 } else {
-                    if (m.id === 1) {
-                        specialties.forEach(spec => {
-                            const trainers = getTrainerKeys(1, spec.id);
-                            const specGroups = allGroups.filter(g => g.specialtyId === spec.id);
-                            
-                            specGroups.forEach((g, idx) => {
-                                const historyKey = `${g.globalId}-${m.id}`;
-                                if (persistenceMap.has(historyKey)) {
-                                    assignmentsMap[g.globalId][m.id] = persistenceMap.get(historyKey)!;
-                                } else {
-                                    const offset = attempt; 
-                                    assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
-                                }
-                            });
-                        });
-                    } else {
-                        const trainers = getTrainerKeys(m.id, '');
-                        allGroups.forEach((g, idx) => {
-                            const historyKey = `${g.globalId}-${m.id}`;
-                            if (persistenceMap.has(historyKey)) {
-                                assignmentsMap[g.globalId][m.id] = persistenceMap.get(historyKey)!;
+                    const logicScopes = m.id === 1 
+                        ? specialties.map(s => ({ specId: s.id, groups: allGroups.filter(g => g.specialtyId === s.id) }))
+                        : [{ specId: '', groups: allGroups }];
+
+                    logicScopes.forEach(scope => {
+                        const trainers = getTrainerKeys(m.id, scope.specId);
+                        
+                        // CALCULATE "FAIR SHARE CAP"
+                        // Example: 3 Groups / 3 Trainers = 1 group per trainer max.
+                        // Example: 3 Groups / 2 Trainers = 2 groups max.
+                        const fairShareCap = Math.ceil(scope.groups.length / (trainers.length || 1));
+
+                        // Track Load for Fairness
+                        const trainerLoad: Record<string, number> = {};
+                        trainers.forEach(t => trainerLoad[t] = 0);
+
+                        const unassignedGroups: typeof allGroups = [];
+
+                        // 2. STABILITY PASS: Assign locked trainers BUT respect Fair Share Cap
+                        scope.groups.forEach(g => {
+                            const histKey = `${g.globalId}-${m.id}`;
+                            const historyTrainer = persistenceMap.get(histKey);
+
+                            // Check if history trainer is valid AND hasn't exceeded the Fair Share Cap
+                            if (
+                                historyTrainer && 
+                                trainers.includes(historyTrainer) && 
+                                trainerLoad[historyTrainer] < fairShareCap
+                            ) {
+                                assignmentsMap[g.globalId][m.id] = historyTrainer;
+                                trainerLoad[historyTrainer]++; // Count load
                             } else {
-                                const offset = attempt;
-                                assignmentsMap[g.globalId][m.id] = trainers[(idx + offset) % trainers.length];
+                                unassignedGroups.push(g); // Needs new assignment (Fairness over Stability in excess cases)
                             }
                         });
-                    }
+
+                        // 3. FAIRNESS PASS: Assign remainder to lowest load
+                        // Randomize groups to avoid bias
+                        unassignedGroups.sort(() => Math.random() - 0.5);
+
+                        unassignedGroups.forEach(g => {
+                            // Sort trainers by current load (Ascending)
+                            trainers.sort((a, b) => (trainerLoad[a] - trainerLoad[b]) || (Math.random() - 0.5));
+                            
+                            const bestTrainer = trainers[0];
+                            if (bestTrainer) {
+                                assignmentsMap[g.globalId][m.id] = bestTrainer;
+                                trainerLoad[bestTrainer]++;
+                            }
+                        });
+                    });
                 }
             });
 
+            // --- 4. SCHEDULING LOOP (Time Slot Allocation) ---
             let attemptFailed = false;
             const currentAssignmentsList: TrainerAssignment[] = [];
 
@@ -280,7 +303,6 @@ const TimetableGenerator: React.FC = () => {
                     for (let h = 0; h < 5; h++) {
                         if (selectedSessionId === 3 && dayIdx > 0 && h >= 4) continue;
 
-                        // IMPORTANT: We use a set of Occupied IDENTITIES (Names) not just IDs
                         const busyIdentities = new Set<string>();
                         
                         const shuffledGroups = [...allGroups].sort(() => Math.random() - 0.5);
@@ -289,17 +311,17 @@ const TimetableGenerator: React.FC = () => {
                             const gId = g.globalId;
                             
                             const candidates = availableModules.filter(m => {
-                                // 1. Check Remaining Hours
                                 if ((remainingHours[gId][m.id] || 0) <= 0) return false;
                                 
-                                // 2. Check Trainer Availability (By NAME)
+                                // Look up the FIXED assignment we made earlier
                                 const trainerKey = assignmentsMap[gId][m.id];
+                                if (!trainerKey) return false; 
+
                                 const identity = getTrainerIdentity(m.id, trainerKey);
                                 
-                                // If "Name:Ahmed" is already busy teaching ANY module, we skip
+                                // Is this specific trainer busy right now?
                                 if (busyIdentities.has(identity)) return false;
                                 
-                                // 3. Check Daily Limit (Max 2 hours per module per day)
                                 const usedToday = dailyModuleUsage[gId][m.id] || 0;
                                 if (usedToday >= 2) return false;
                                 
@@ -355,6 +377,7 @@ const TimetableGenerator: React.FC = () => {
 
                 if (!daySuccess) {
                     attemptFailed = true;
+                    // Failure Reason Logic
                     const neededModules: Record<number, number> = {};
                     allGroups.forEach(g => {
                         Object.entries(remainingHours[g.globalId]).forEach(([mId, hrs]) => {
@@ -363,7 +386,7 @@ const TimetableGenerator: React.FC = () => {
                     });
                     const worstModuleId = Object.keys(neededModules).reduce((a, b) => neededModules[parseInt(a)] > neededModules[parseInt(b)] ? a : b, "1");
                     const modName = getModuleName(parseInt(worstModuleId));
-                    bestFailureReason = `تعذر إكمال التوزيع بسبب ضغط التوقيت على الأساتذة (خاصة في مقياس ${modName}). يرجى التحقق من الأسماء المكررة أو زيادة عدد الأساتذة.`;
+                    bestFailureReason = `تعذر إكمال التوزيع بسبب ضغط التوقيت في مقياس (${modName}). رغم توزيع الأفواج بعدل، إلا أن عدد الأساتذة قليل جداً مقارنة بعدد الحصص المتزامنة. يرجى زيادة عدد الأساتذة.`;
                     break; 
                 }
             }
@@ -376,7 +399,7 @@ const TimetableGenerator: React.FC = () => {
         }
 
         if (bestSchedule.length === 0) {
-             alert(bestFailureReason || "تعذر توليد جدول مثالي. تأكد من أنك لم تسند مقاييس كثيرة لنفس الأستاذ بشكل يجعل التوزيع مستحيلاً.");
+             alert(bestFailureReason || "تعذر توليد جدول مثالي. تأكد من أن عدد الأساتذة كافٍ لتغطية عدد الأفواج في الحصص الصباحية.");
              setIsGenerating(false);
              return;
         }
@@ -415,7 +438,7 @@ const TimetableGenerator: React.FC = () => {
         localStorage.setItem('takwin_schedule', JSON.stringify(finalSchedule));
         localStorage.setItem('takwin_assignments', JSON.stringify(finalAssignments));
         
-        alert(`تم توليد وحفظ توزيع ${currentSession.name} بنجاح!\n(تم مراعاة الأساتذة الذين يدرسون أكثر من مقياس)`);
+        alert(`تم توليد وحفظ توزيع ${currentSession.name} بنجاح!\n(تم تطبيق العدالة الرياضية الصارمة مع مراعاة الاستقرار في حدود النصاب)`);
 
     } catch (err) {
         console.error("Gen Error", err);
@@ -733,524 +756,575 @@ const TimetableGenerator: React.FC = () => {
         }
       `}</style>
 
-      {/* Controls - Hide on Print */}
-      <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 print:hidden">
-        <div className="flex flex-col gap-6">
-             <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-slate-800 pb-6">
-                <div className="w-full md:w-2/3">
-                    <label className="block text-slate-400 text-sm font-bold mb-2">1. اختر الدورة الزمنية</label>
-                    <div className="flex gap-2">
-                        {SESSIONS.map(s => (
-                            <button
-                                key={s.id}
-                                onClick={() => setSelectedSessionId(s.id)}
-                                className={`flex-1 py-3 rounded-xl text-sm font-bold border transition-colors ${
-                                    selectedSessionId === s.id 
-                                    ? 'bg-dzgreen-600 border-dzgreen-500 text-white shadow-lg' 
-                                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-                                }`}
-                            >
-                                {s.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                
-                <div className="w-full md:w-1/3">
-                    <button 
-                        onClick={generateGlobalSchedule}
-                        disabled={isGenerating}
-                        className="w-full h-[52px] flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
-                    >
-                        {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ArrowRightLeft className="w-5 h-5" />}
-                        {isGenerating ? 'توليد التوزيع (بدون فراغات)' : 'توليد التوزيع الشامل'}
-                    </button>
-                </div>
-            </div>
+      {/* Tab Switching Control */}
+      <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 w-fit mb-6 print:hidden">
+          <button
+              onClick={() => setActiveTab('generator')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${
+                  activeTab === 'generator' 
+                  ? 'bg-blue-600 text-white shadow-lg' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+          >
+              <RefreshCw className="w-4 h-4" />
+              توليد التوزيع
+          </button>
+          
+          <button
+              onClick={() => setActiveTab('editor')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${
+                  activeTab === 'editor' 
+                  ? 'bg-amber-600 text-white shadow-lg' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+          >
+              <Edit3 className="w-4 h-4" />
+              تعديل يدوي
+          </button>
 
-            {/* View Controls & Print Mode */}
-            {schedule.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                     {/* Normal Viewing */}
-                     <div className="space-y-4">
-                         <h4 className="text-white font-bold text-sm border-b border-slate-700 pb-2 flex items-center gap-2">
-                             <Users className="w-4 h-4 text-blue-400" />
-                             العرض المباشر (للمعاينة)
-                         </h4>
-                         <div className="flex gap-4">
-                            <div className="flex-1">
-                                <label className="block text-slate-400 text-xs font-bold mb-1">تخصص (الأفواج):</label>
-                                <select 
-                                    value={viewSpecialtyId} 
-                                    onChange={(e) => setViewSpecialtyId(e.target.value)}
-                                    className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
-                                >
-                                    {specialties.map(spec => (
-                                        <option key={spec.id} value={spec.id}>{spec.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                         </div>
-                     </div>
-
-                     {/* Printing Controls */}
-                     <div className="space-y-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
-                         <h4 className="text-white font-bold text-sm border-b border-slate-700 pb-2 flex items-center gap-2">
-                             <Printer className="w-4 h-4 text-emerald-400" />
-                             طباعة الجداول الفردية
-                         </h4>
-                         <div className="flex gap-4 items-end">
-                             <div className="flex-1">
-                                 <label className="block text-slate-400 text-xs font-bold mb-1">نوع الجدول:</label>
-                                 <select 
-                                    value={printMode} 
-                                    onChange={(e) => { setPrintMode(e.target.value as any); setPrintTarget(''); }}
-                                    className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
-                                 >
-                                     <option value="none">اختر...</option>
-                                     <option value="group">جدول خاص بفوج</option>
-                                     <option value="trainer">جدول خاص بأستاذ</option>
-                                 </select>
-                             </div>
-                             
-                             {printMode !== 'none' && (
-                                 <div className="flex-[2]">
-                                     <label className="block text-slate-400 text-xs font-bold mb-1">
-                                         {printMode === 'group' ? 'اختر الفوج:' : 'اختر الأستاذ:'}
-                                     </label>
-                                     <select 
-                                        value={printTarget} 
-                                        onChange={(e) => setPrintTarget(e.target.value)}
-                                        className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
-                                     >
-                                         <option value="">-- حدد --</option>
-                                         {printMode === 'group' 
-                                            ? getAllGroupsList().map(g => <option key={g.id} value={g.id}>{g.name}</option>)
-                                            : getAllTrainersList().map(t => <option key={`${t.moduleId}-${t.key}`} value={`${t.moduleId}-${t.key}`}>{t.name} ({getModuleName(t.moduleId, true)})</option>)
-                                         }
-                                     </select>
-                                 </div>
-                             )}
-                         </div>
-                         {printTarget && (
-                             <button 
-                                onClick={handlePrint}
-                                className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-2 shadow-lg"
-                             >
-                                 <Printer className="w-4 h-4" />
-                                 طباعة الجدول
-                             </button>
-                         )}
-                     </div>
-                </div>
-            )}
-        </div>
+          <button
+              onClick={() => setActiveTab('attribution')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-bold transition-all ${
+                  activeTab === 'attribution' 
+                  ? 'bg-emerald-600 text-white shadow-lg' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+          >
+              <Table2 className="w-4 h-4" />
+              جدول الإسناد
+          </button>
       </div>
 
-      {schedule.length > 0 && (
+      {activeTab === 'editor' && <TimetableEditor />}
+
+      {activeTab === 'attribution' && (
+          <TrainerAttribution 
+              sessionId={selectedSessionId}
+              assignments={trainerAssignments}
+              trainerConfig={trainerConfig}
+              specialties={specialties}
+              institution={institution}
+          />
+      )}
+
+      {activeTab === 'generator' && (
         <>
-            {/* --- PRINT VIEW SECTION --- */}
-            <div id="print-section" className="hidden print:block text-black">
-                <div style={{ direction: 'rtl' }}>
-                    
-                    {/* GROUP PRINT (LANDSCAPE - BALANCED) */}
-                    {printMode === 'group' && printTarget && (
-                        <>
-                            {getPrintableGroupSchedule(printTarget).map((pageDays, pageIndex, allPages) => (
-                                <div key={pageIndex} className="print-page-landscape flex flex-col h-full relative">
-                                    
-                                    {/* Page Header */}
-                                    <div className="text-center border-b-2 border-black pb-2 mb-2">
-                                        <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
-                                        <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
-                                        <div className="flex justify-between mt-1 px-4 text-xs font-bold">
-                                            <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
-                                            <span>مركز التكوين {institution.center || '...................'}</span>
-                                        </div>
+            {/* Controls - Hide on Print */}
+            <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 print:hidden">
+                <div className="flex flex-col gap-6">
+                    <div className="flex flex-col md:flex-row justify-between items-end gap-4 border-b border-slate-800 pb-6">
+                        <div className="w-full md:w-2/3">
+                            <label className="block text-slate-400 text-sm font-bold mb-2">1. اختر الدورة الزمنية</label>
+                            <div className="flex gap-2">
+                                {SESSIONS.map(s => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => setSelectedSessionId(s.id)}
+                                        className={`flex-1 py-3 rounded-xl text-sm font-bold border transition-colors ${
+                                            selectedSessionId === s.id 
+                                            ? 'bg-dzgreen-600 border-dzgreen-500 text-white shadow-lg' 
+                                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        {s.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="w-full md:w-1/3">
+                            <button 
+                                onClick={generateGlobalSchedule}
+                                disabled={isGenerating}
+                                className="w-full h-[52px] flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50"
+                            >
+                                {isGenerating ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ArrowRightLeft className="w-5 h-5" />}
+                                {isGenerating ? 'توليد التوزيع (بدون فراغات)' : 'توليد التوزيع الشامل'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* View Controls & Print Mode */}
+                    {schedule.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Normal Viewing */}
+                            <div className="space-y-4">
+                                <h4 className="text-white font-bold text-sm border-b border-slate-700 pb-2 flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-blue-400" />
+                                    العرض المباشر (للمعاينة)
+                                </h4>
+                                <div className="flex gap-4">
+                                    <div className="flex-1">
+                                        <label className="block text-slate-400 text-xs font-bold mb-1">تخصص (الأفواج):</label>
+                                        <select 
+                                            value={viewSpecialtyId} 
+                                            onChange={(e) => setViewSpecialtyId(e.target.value)}
+                                            className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
+                                        >
+                                            {specialties.map(spec => (
+                                                <option key={spec.id} value={spec.id}>{spec.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
+                                </div>
+                            </div>
 
-                                    {/* Page Title */}
-                                    <div className="text-center mb-2">
-                                        <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
-                                            جدول التوقيت الأسبوعي - {getAllGroupsList().find(g => g.id === printTarget)?.name}
-                                        </h1>
-                                        <div className="flex justify-center gap-4 mt-1 font-bold text-xs">
-                                            <span>{currentSession.name}</span>
-                                            <span>({currentSession.startDate} إلى {currentSession.endDate})</span>
-                                            {allPages.length > 1 && <span>(صفحة {pageIndex + 1} من {allPages.length})</span>}
-                                        </div>
+                            {/* Printing Controls */}
+                            <div className="space-y-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
+                                <h4 className="text-white font-bold text-sm border-b border-slate-700 pb-2 flex items-center gap-2">
+                                    <Printer className="w-4 h-4 text-emerald-400" />
+                                    طباعة الجداول الفردية
+                                </h4>
+                                <div className="flex gap-4 items-end">
+                                    <div className="flex-1">
+                                        <label className="block text-slate-400 text-xs font-bold mb-1">نوع الجدول:</label>
+                                        <select 
+                                            value={printMode} 
+                                            onChange={(e) => { setPrintMode(e.target.value as any); setPrintTarget(''); }}
+                                            className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
+                                        >
+                                            <option value="none">اختر...</option>
+                                            <option value="group">جدول خاص بفوج</option>
+                                            <option value="trainer">جدول خاص بأستاذ</option>
+                                        </select>
                                     </div>
                                     
-                                    {/* Table Container - FIXED HEIGHT ROWS */}
-                                    <div className="flex-grow-0">
-                                        <table className="w-full border-2 border-black text-center text-xs table-fixed">
-                                            <thead className="bg-gray-100 h-10">
-                                                <tr>
-                                                    <th className="border border-black p-1 w-[12%]">اليوم / التاريخ</th>
-                                                    {[0,1,2,3,4].map(h => {
-                                                        if (selectedSessionId === 3 && h === 4) return null;
-                                                        return (
-                                                            <th key={h} className="border border-black p-1">
-                                                                {8+h}:00 - {9+h}:00
-                                                            </th>
-                                                        );
-                                                    })}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {pageDays.map((day, dIdx) => (
-                                                    <tr key={dIdx} className="h-14">
-                                                        <td className="border border-black p-1 font-bold bg-gray-50">
-                                                            <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
-                                                            <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
-                                                        </td>
-                                                        {[0,1,2,3,4].map(h => {
-                                                            if (selectedSessionId === 3 && h === 4) return null;
+                                    {printMode !== 'none' && (
+                                        <div className="flex-[2]">
+                                            <label className="block text-slate-400 text-xs font-bold mb-1">
+                                                {printMode === 'group' ? 'اختر الفوج:' : 'اختر الأستاذ:'}
+                                            </label>
+                                            <select 
+                                                value={printTarget} 
+                                                onChange={(e) => setPrintTarget(e.target.value)}
+                                                className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
+                                            >
+                                                <option value="">-- حدد --</option>
+                                                {printMode === 'group' 
+                                                    ? getAllGroupsList().map(g => <option key={g.id} value={g.id}>{g.name}</option>)
+                                                    : getAllTrainersList().map(t => <option key={`${t.moduleId}-${t.key}`} value={`${t.moduleId}-${t.key}`}>{t.name} ({getModuleName(t.moduleId, true)})</option>)
+                                                }
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                                {printTarget && (
+                                    <button 
+                                        onClick={handlePrint}
+                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-2 shadow-lg"
+                                    >
+                                        <Printer className="w-4 h-4" />
+                                        طباعة الجدول
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
 
-                                                            const slot = day.slots.find(s => parseInt(s.time) === (8+h)) 
-                                                                || day.slots.find(s => parseInt(s.time) === (8+h-1) && s.duration === 2);
-                                                            
-                                                            if (!slot || !slot.moduleId) {
-                                                                return <td key={h} className="border border-black bg-gray-100"></td>;
-                                                            }
+            {schedule.length > 0 && (
+                <>
+                    {/* --- PRINT VIEW SECTION --- */}
+                    <div id="print-section" className="hidden print:block text-black">
+                        <div style={{ direction: 'rtl' }}>
+                            
+                            {/* GROUP PRINT (LANDSCAPE - BALANCED) */}
+                            {printMode === 'group' && printTarget && (
+                                <>
+                                    {getPrintableGroupSchedule(printTarget).map((pageDays, pageIndex, allPages) => (
+                                        <div key={pageIndex} className="print-page-landscape flex flex-col h-full relative">
+                                            
+                                            {/* Page Header */}
+                                            <div className="text-center border-b-2 border-black pb-2 mb-2">
+                                                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                                                <div className="flex justify-between mt-1 px-4 text-xs font-bold">
+                                                    <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
+                                                    <span>مركز التكوين {institution.center || '...................'}</span>
+                                                </div>
+                                            </div>
 
-                                                            // Find trainer
-                                                            const [specId, gNum] = printTarget.split('-');
-                                                            const trainerName = getTrainerNameForSlot(schedule[0].days.findIndex(d => d.date === day.date), h, parseInt(gNum), specId, slot.moduleId);
-
-                                                            return (
-                                                                <td key={h} className="border border-black p-1 align-middle relative group">
-                                                                    <div className={`font-bold text-xs border-b border-dotted border-gray-400 pb-1 mb-1 ${slot.moduleId===999 ? 'text-amber-900' : 'text-black'}`}>
-                                                                        {getModuleName(slot.moduleId)}
-                                                                    </div>
-                                                                    <div className="text-[9px] italic text-gray-700">{trainerName}</div>
+                                            {/* Page Title */}
+                                            <div className="text-center mb-2">
+                                                <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
+                                                    جدول التوقيت الأسبوعي - {getAllGroupsList().find(g => g.id === printTarget)?.name}
+                                                </h1>
+                                                <div className="flex justify-center gap-4 mt-1 font-bold text-xs">
+                                                    <span>{currentSession.name}</span>
+                                                    <span>({currentSession.startDate} إلى {currentSession.endDate})</span>
+                                                    {allPages.length > 1 && <span>(صفحة {pageIndex + 1} من {allPages.length})</span>}
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Table Container - FIXED HEIGHT ROWS */}
+                                            <div className="flex-grow-0">
+                                                <table className="w-full border-2 border-black text-center text-xs table-fixed">
+                                                    <thead className="bg-gray-100 h-10">
+                                                        <tr>
+                                                            <th className="border border-black p-1 w-[12%]">اليوم / التاريخ</th>
+                                                            {[0,1,2,3,4].map(h => {
+                                                                if (selectedSessionId === 3 && h === 4) return null;
+                                                                return (
+                                                                    <th key={h} className="border border-black p-1">
+                                                                        {8+h}:00 - {9+h}:00
+                                                                    </th>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {pageDays.map((day, dIdx) => (
+                                                            <tr key={dIdx} className="h-14">
+                                                                <td className="border border-black p-1 font-bold bg-gray-50">
+                                                                    <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
+                                                                    <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
                                                                 </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                                                {[0,1,2,3,4].map(h => {
+                                                                    if (selectedSessionId === 3 && h === 4) return null;
 
-                                    {/* Signatures on LAST PAGE */}
-                                    {pageIndex === allPages.length - 1 ? (
-                                        <div className="mt-auto h-24 flex justify-end px-12 font-bold text-left text-sm">
-                                            <div className="text-center">
-                                                <p className="mb-10">المدير البيداغوجي</p>
-                                                <p>........................</p>
+                                                                    const slot = day.slots.find(s => parseInt(s.time) === (8+h)) 
+                                                                        || day.slots.find(s => parseInt(s.time) === (8+h-1) && s.duration === 2);
+                                                                    
+                                                                    if (!slot || !slot.moduleId) {
+                                                                        return <td key={h} className="border border-black bg-gray-100"></td>;
+                                                                    }
+
+                                                                    // Find trainer
+                                                                    const [specId, gNum] = printTarget.split('-');
+                                                                    const trainerName = getTrainerNameForSlot(schedule[0].days.findIndex(d => d.date === day.date), h, parseInt(gNum), specId, slot.moduleId);
+
+                                                                    return (
+                                                                        <td key={h} className="border border-black p-1 align-middle relative group">
+                                                                            <div className={`font-bold text-xs border-b border-dotted border-gray-400 pb-1 mb-1 ${slot.moduleId===999 ? 'text-amber-900' : 'text-black'}`}>
+                                                                                {getModuleName(slot.moduleId)}
+                                                                            </div>
+                                                                            <div className="text-[9px] italic text-gray-700">{trainerName}</div>
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Signatures on LAST PAGE */}
+                                            {pageIndex === allPages.length - 1 ? (
+                                                <div className="mt-auto h-24 flex justify-end px-12 font-bold text-left text-sm">
+                                                    <div className="text-center">
+                                                        <p className="mb-10">المدير البيداغوجي</p>
+                                                        <p>........................</p>
+                                                    </div>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                </>
+                            )}
+
+                            {/* TRAINER PRINT (PORTRAIT - FILTERED SINGLE PAGE) */}
+                            {printMode === 'trainer' && printTarget && (
+                                <>
+                                    {getPrintableTrainerSchedule().map((pageDays, pageIndex) => (
+                                        <div key={pageIndex} className="print-page-portrait flex flex-col justify-between">
+                                            <div className="text-center border-b-2 border-black pb-2 mb-2">
+                                                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                                                <div className="flex justify-between mt-1 px-4 text-xs font-bold">
+                                                    <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
+                                                    <span>مركز التكوين {institution.center || '...................'}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="text-center mb-4">
+                                                <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
+                                                    جدول التوقيت الشخصي
+                                                </h1>
+                                                <div className="mt-2 text-sm font-bold flex flex-col gap-1">
+                                                    <span>الأستاذ: {getAllTrainersList().find(t => `${t.moduleId}-${t.key}` === printTarget)?.name}</span>
+                                                    <span>مقياس: {getModuleName(parseInt(printTarget.split('-')[0]))}</span>
+                                                </div>
+                                                <div className="flex justify-center gap-4 mt-1 font-bold text-xs text-gray-600">
+                                                    <span>{currentSession.name}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-grow flex items-start">
+                                                <table className="w-full border-2 border-black text-center text-xs table-fixed h-full">
+                                                    <thead className="bg-gray-100 h-10">
+                                                        <tr>
+                                                            <th className="border border-black p-1 w-[15%]">اليوم</th>
+                                                            {[0,1,2,3,4].map(h => {
+                                                                if (selectedSessionId === 3 && h === 4) return null;
+                                                                return (
+                                                                    <th key={h} className="border border-black p-1">
+                                                                        {8+h}:00 - {9+h}:00
+                                                                    </th>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {pageDays.map((day, dIdx) => (
+                                                            <tr key={dIdx} className="h-14">
+                                                                <td className="border border-black p-1 font-bold bg-gray-50 h-auto">
+                                                                    <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
+                                                                    <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
+                                                                </td>
+                                                                {[0,1,2,3,4].map(h => {
+                                                                    if (selectedSessionId === 3 && h === 4) return null;
+
+                                                                    const parts = printTarget.split('-');
+                                                                    const mId = parseInt(parts[0]);
+                                                                    const tKey = parts.slice(1).join('-'); 
+
+                                                                    const assign = trainerAssignments.find(a => 
+                                                                        a.sessionId === selectedSessionId &&
+                                                                        a.moduleId === mId &&
+                                                                        a.trainerKey === tKey &&
+                                                                        a.dayIndex === (day as any).originalIndex && 
+                                                                        a.hourIndex === h
+                                                                    );
+
+                                                                    if (!assign) return <td key={h} className="border border-black bg-gray-100"></td>;
+
+                                                                    const [sId, gN] = assign.groupId.split('-');
+                                                                    const sName = specialties.find(s=>s.id === sId)?.name;
+
+                                                                    return (
+                                                                        <td key={h} className="border border-black p-1 font-bold text-xs align-middle bg-white">
+                                                                            <div className="font-bold">{sName}</div>
+                                                                            <div className="bg-black text-white inline-block px-2 rounded mt-1">فوج {gN}</div>
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Footer for Trainers - Portrait layout signature */}
+                                            <div className="mt-4 h-24 flex justify-end px-8 font-bold text-left text-sm">
+                                                <div className="text-center">
+                                                    <p className="mb-10">المدير البيداغوجي</p>
+                                                    <p>........................</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    ) : null}
-                                </div>
-                            ))}
-                        </>
-                    )}
+                                    ))}
+                                </>
+                            )}
+                        </div>
+                    </div>
 
-                    {/* TRAINER PRINT (PORTRAIT - FILTERED SINGLE PAGE) */}
-                    {printMode === 'trainer' && printTarget && (
-                        <>
-                            {getPrintableTrainerSchedule().map((pageDays, pageIndex) => (
-                                <div key={pageIndex} className="print-page-portrait flex flex-col justify-between">
-                                    <div className="text-center border-b-2 border-black pb-2 mb-2">
-                                        <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
-                                        <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
-                                        <div className="flex justify-between mt-1 px-4 text-xs font-bold">
-                                            <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
-                                            <span>مركز التكوين {institution.center || '...................'}</span>
-                                        </div>
+                    {/* SCREEN VIEW (Original) - Hidden on Print */}
+                    <div className="space-y-12 animate-fadeIn print:hidden">
+                        
+                        {/* 1. GROUPS SCHEDULE */}
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 mb-2 border-b border-slate-800 pb-2">
+                                <Users className="w-6 h-6 text-blue-400" />
+                                <h3 className="text-xl font-bold text-white">
+                                    جدول التوقيت - أفواج تخصص: <span className="text-blue-400">{specialties.find(s=>s.id === viewSpecialtyId)?.name}</span>
+                                </h3>
+                            </div>
+
+                            {visibleDays.map((day, dayIndex) => (
+                                <div key={day.date} className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 overflow-hidden">
+                                    <div className="p-3 bg-blue-900/10 border-b border-slate-800">
+                                        <h3 className="font-bold text-white text-sm">{formatDate(day.date)}</h3>
                                     </div>
-
-                                    <div className="text-center mb-4">
-                                        <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
-                                            جدول التوقيت الشخصي
-                                        </h1>
-                                        <div className="mt-2 text-sm font-bold flex flex-col gap-1">
-                                            <span>الأستاذ: {getAllTrainersList().find(t => `${t.moduleId}-${t.key}` === printTarget)?.name}</span>
-                                            <span>مقياس: {getModuleName(parseInt(printTarget.split('-')[0]))}</span>
-                                        </div>
-                                        <div className="flex justify-center gap-4 mt-1 font-bold text-xs text-gray-600">
-                                            <span>{currentSession.name}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex-grow flex items-start">
-                                        <table className="w-full border-2 border-black text-center text-xs table-fixed h-full">
-                                            <thead className="bg-gray-100 h-10">
-                                                <tr>
-                                                    <th className="border border-black p-1 w-[15%]">اليوم</th>
-                                                    {[0,1,2,3,4].map(h => {
-                                                        if (selectedSessionId === 3 && h === 4) return null;
-                                                        return (
-                                                            <th key={h} className="border border-black p-1">
-                                                                {8+h}:00 - {9+h}:00
-                                                            </th>
-                                                        );
-                                                    })}
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-right text-sm">
+                                            <thead>
+                                                <tr className="bg-slate-800/30 text-slate-400">
+                                                    <th className="py-2 px-4 w-32">التوقيت</th>
+                                                    {specialties.find(s => s.id === viewSpecialtyId)?.groups && Array.from({length: specialties.find(s => s.id === viewSpecialtyId)!.groups}).map((_, i) => (
+                                                        <th key={i} className="py-2 px-4 text-center border-l border-slate-700 text-slate-200">
+                                                            فوج {i + 1}
+                                                        </th>
+                                                    ))}
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {pageDays.map((day, dIdx) => (
-                                                    <tr key={dIdx} className="h-14">
-                                                        <td className="border border-black p-1 font-bold bg-gray-50 h-auto">
-                                                            <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
-                                                            <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
-                                                        </td>
-                                                        {[0,1,2,3,4].map(h => {
-                                                            if (selectedSessionId === 3 && h === 4) return null;
+                                                {[0,1,2,3,4].map(h => {
+                                                    const hourStart = 8 + h;
+                                                    return (
+                                                        <tr key={h} className="border-t border-slate-800">
+                                                            <td className="py-2 px-4 font-mono text-slate-500">{hourStart}:00 - {hourStart+1}:00</td>
+                                                            {specialties.find(s => s.id === viewSpecialtyId)?.groups && Array.from({length: specialties.find(s => s.id === viewSpecialtyId)!.groups}).map((_, i) => {
+                                                                const groupSchedule = schedule.find(g => g.specialtyId === viewSpecialtyId && g.groupId === i + 1);
+                                                                
+                                                                // Find slot by date AND time
+                                                                const daySched = groupSchedule?.days.find(d => d.date === day.date);
+                                                                const slot = daySched?.slots.find(s => parseInt(s.time.split(':')[0]) === hourStart)
+                                                                            || daySched?.slots.find(s => parseInt(s.time.split(':')[0]) === hourStart - 1 && s.duration === 2);
+                                                                
+                                                                const trainerName = slot?.moduleId ? getTrainerNameForSlot(dayIndex, h, i+1, viewSpecialtyId, slot.moduleId) : '';
 
-                                                            const parts = printTarget.split('-');
-                                                            const mId = parseInt(parts[0]);
-                                                            const tKey = parts.slice(1).join('-'); 
-
-                                                            // Correct logic for Filtered Trainer Schedule:
-                                                            // We must use `day.originalIndex` because the `pageDays` array is filtered and its index `dIdx` 
-                                                            // no longer matches the session day index (0..N) stored in assignments.
-                                                            
-                                                            const assign = trainerAssignments.find(a => 
-                                                                a.sessionId === selectedSessionId &&
-                                                                a.moduleId === mId &&
-                                                                a.trainerKey === tKey &&
-                                                                a.dayIndex === (day as any).originalIndex && // USE originalIndex
-                                                                a.hourIndex === h
-                                                            );
-
-                                                            if (!assign) return <td key={h} className="border border-black bg-gray-100"></td>;
-
-                                                            const [sId, gN] = assign.groupId.split('-');
-                                                            const sName = specialties.find(s=>s.id === sId)?.name;
-
-                                                            return (
-                                                                <td key={h} className="border border-black p-1 font-bold text-xs align-middle bg-white">
-                                                                    <div className="font-bold">{sName}</div>
-                                                                    <div className="bg-black text-white inline-block px-2 rounded mt-1">فوج {gN}</div>
-                                                                </td>
-                                                            );
-                                                        })}
-                                                    </tr>
-                                                ))}
+                                                                return (
+                                                                    <td key={i} className="py-2 px-2 border-l border-slate-700 text-center">
+                                                                        {slot?.moduleId ? (
+                                                                            <div className={`border border-slate-600 rounded px-2 py-1.5 flex flex-col gap-1 ${slot.moduleId === 999 ? 'bg-amber-900/30' : 'bg-slate-800'}`}>
+                                                                                <span className="font-bold text-white text-xs">{getModuleName(slot.moduleId)}</span>
+                                                                                <span className="text-[10px] text-slate-400 bg-slate-900/50 rounded px-1 py-0.5">{trainerName}</span>
+                                                                            </div>
+                                                                        ) : <span className="text-slate-700">-</span>}
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    )
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
+                            ))}
+                        </div>
 
-                                    {/* Footer for Trainers - Portrait layout signature */}
-                                    <div className="mt-4 h-24 flex justify-end px-8 font-bold text-left text-sm">
-                                        <div className="text-center">
-                                            <p className="mb-10">المدير البيداغوجي</p>
-                                            <p>........................</p>
-                                        </div>
+                        {/* 2. TRAINERS SCHEDULE */}
+                        <div className="space-y-4">
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-2 border-b border-slate-800 pb-2 mt-12">
+                                <div className="flex items-center gap-2">
+                                    <GraduationCap className="w-6 h-6 text-purple-400" />
+                                    <h3 className="text-xl font-bold text-white">
+                                        توزيع الأساتذة
+                                    </h3>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-slate-400 text-xs font-bold whitespace-nowrap">اختر المقياس:</label>
+                                    <select 
+                                        value={viewModuleId} 
+                                        onChange={(e) => setViewModuleId(parseInt(e.target.value))}
+                                        className="bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm w-64"
+                                    >
+                                        {MODULES.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
+                                        <option value={999}>أعمال تطبيقية / مراجعة</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {visibleDays.map((day, dayIndex) => (
+                                <div key={day.date} className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 overflow-hidden">
+                                    <div className="p-3 bg-purple-900/10 border-b border-slate-800">
+                                        <h3 className="font-bold text-white text-sm">{formatDate(day.date)}</h3>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-right text-sm">
+                                            <thead>
+                                                <tr className="bg-slate-800/30 text-slate-400">
+                                                    <th className="py-2 px-4 w-32">التوقيت</th>
+                                                    {getTrainerColumns().map(col => (
+                                                        <th key={col.id} className="py-2 px-4 text-center border-l border-slate-700 text-slate-200">
+                                                            {col.label}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {[0,1,2,3,4].map(h => {
+                                                    const hourStart = 8 + h;
+                                                    return (
+                                                        <tr key={h} className="border-t border-slate-800">
+                                                            <td className="py-2 px-4 font-mono text-slate-500">{hourStart}:00</td>
+                                                            {getTrainerColumns().map(col => {
+                                                                const assignment = trainerAssignments.find(a => 
+                                                                    a.sessionId === selectedSessionId && 
+                                                                    a.moduleId === viewModuleId &&
+                                                                    a.dayIndex === dayIndex &&
+                                                                    a.hourIndex === h &&
+                                                                    a.trainerKey === col.id
+                                                                );
+                                                                
+                                                                if (viewModuleId === 999 && !assignment) {
+                                                                    const supAssign = trainerAssignments.find(a => a.sessionId === selectedSessionId && a.moduleId === 999 && a.dayIndex === dayIndex && a.hourIndex === h);
+                                                                    if (supAssign) {
+                                                                        return (
+                                                                            <td key={col.id} className="py-2 px-2 border-l border-slate-700 text-center">
+                                                                                <div className="bg-amber-900/30 border border-amber-700 rounded px-2 py-1 text-xs text-amber-200">
+                                                                                    مشرف عام
+                                                                                </div>
+                                                                            </td>
+                                                                        )
+                                                                    }
+                                                                }
+
+                                                                if (!assignment) return <td key={col.id} className="border-l border-slate-700"></td>;
+                                                                
+                                                                const parts = assignment.groupId.split('-');
+                                                                const specName = specialties.find(s=>s.id === parts[0])?.name;
+                                                                return (
+                                                                    <td key={col.id} className="py-2 px-2 border-l border-slate-700 text-center">
+                                                                        <div className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-purple-200">
+                                                                            {specName} - ف {parts[1]}
+                                                                        </div>
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    )
+                                                })}
+                                            </tbody>
+                                        </table>
                                     </div>
                                 </div>
                             ))}
-                        </>
-                    )}
-                </div>
-            </div>
+                        </div>
 
-            {/* SCREEN VIEW (Original) - Hidden on Print */}
-            <div className="space-y-12 animate-fadeIn print:hidden">
-                
-                {/* 1. GROUPS SCHEDULE */}
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2 border-b border-slate-800 pb-2">
-                        <Users className="w-6 h-6 text-blue-400" />
-                        <h3 className="text-xl font-bold text-white">
-                            جدول التوقيت - أفواج تخصص: <span className="text-blue-400">{specialties.find(s=>s.id === viewSpecialtyId)?.name}</span>
-                        </h3>
-                    </div>
+                        {/* 3. VERIFICATION MATRIX - NEW */}
+                        {renderVerificationMatrix()}
 
-                    {visibleDays.map((day, dayIndex) => (
-                        <div key={day.date} className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 overflow-hidden">
-                            <div className="p-3 bg-blue-900/10 border-b border-slate-800">
-                                <h3 className="font-bold text-white text-sm">{formatDate(day.date)}</h3>
+                        {/* 4. VALIDATION STATS - RESTORED */}
+                        <div className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 p-6 mt-8">
+                            <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-4">
+                                <BarChart3 className="w-6 h-6 text-emerald-400" />
+                                <h3 className="text-xl font-bold text-white">إحصائيات التوليد واكتمال النصاب</h3>
+                                {selectedSessionId === 3 && (
+                                    <span className="text-xs bg-amber-900/50 text-amber-200 px-2 py-1 rounded border border-amber-800 mr-2">
+                                        (تم خصم 20 سا للامتحانات من النصاب)
+                                    </span>
+                                )}
                             </div>
+                            
                             <div className="overflow-x-auto">
                                 <table className="w-full text-right text-sm">
-                                    <thead>
-                                        <tr className="bg-slate-800/30 text-slate-400">
-                                            <th className="py-2 px-4 w-32">التوقيت</th>
-                                            {specialties.find(s => s.id === viewSpecialtyId)?.groups && Array.from({length: specialties.find(s => s.id === viewSpecialtyId)!.groups}).map((_, i) => (
-                                                <th key={i} className="py-2 px-4 text-center border-l border-slate-700 text-slate-200">
-                                                    فوج {i + 1}
-                                                </th>
-                                            ))}
+                                    <thead className="bg-slate-800 text-slate-400">
+                                        <tr>
+                                            <th className="p-3">المقياس</th>
+                                            <th className="p-3 text-center">المطلوب (ساعات)</th>
+                                            <th className="p-3 text-center">المجدول (المعدل)</th>
+                                            <th className="p-3 text-center">الحالة</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        {[0,1,2,3,4].map(h => {
-                                            const hourStart = 8 + h;
-                                            return (
-                                                <tr key={h} className="border-t border-slate-800">
-                                                    <td className="py-2 px-4 font-mono text-slate-500">{hourStart}:00 - {hourStart+1}:00</td>
-                                                    {specialties.find(s => s.id === viewSpecialtyId)?.groups && Array.from({length: specialties.find(s => s.id === viewSpecialtyId)!.groups}).map((_, i) => {
-                                                        const groupSchedule = schedule.find(g => g.specialtyId === viewSpecialtyId && g.groupId === i + 1);
-                                                        
-                                                        // Find slot by date AND time
-                                                        const daySched = groupSchedule?.days.find(d => d.date === day.date);
-                                                        const slot = daySched?.slots.find(s => parseInt(s.time.split(':')[0]) === hourStart)
-                                                                    || daySched?.slots.find(s => parseInt(s.time.split(':')[0]) === hourStart - 1 && s.duration === 2);
-                                                        
-                                                        const trainerName = slot?.moduleId ? getTrainerNameForSlot(dayIndex, h, i+1, viewSpecialtyId, slot.moduleId) : '';
-
-                                                        return (
-                                                            <td key={i} className="py-2 px-2 border-l border-slate-700 text-center">
-                                                                {slot?.moduleId ? (
-                                                                    <div className={`border border-slate-600 rounded px-2 py-1.5 flex flex-col gap-1 ${slot.moduleId === 999 ? 'bg-amber-900/30' : 'bg-slate-800'}`}>
-                                                                        <span className="font-bold text-white text-xs">{getModuleName(slot.moduleId)}</span>
-                                                                        <span className="text-[10px] text-slate-400 bg-slate-900/50 rounded px-1 py-0.5">{trainerName}</span>
-                                                                    </div>
-                                                                ) : <span className="text-slate-700">-</span>}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                </tr>
-                                            )
-                                        })}
+                                    <tbody className="divide-y divide-slate-700">
+                                        {generationStats.map(stat => (
+                                            <tr key={stat.moduleId} className="hover:bg-slate-800/30">
+                                                <td className="p-3 font-bold text-slate-200">{getModuleName(stat.moduleId)}</td>
+                                                <td className="p-3 text-center">{stat.required}</td>
+                                                <td className="p-3 text-center">{stat.scheduled}</td>
+                                                <td className="p-3 text-center">
+                                                    {stat.scheduled >= stat.required ? (
+                                                        <div className="flex items-center justify-center gap-1 text-emerald-400 font-bold">
+                                                            <CheckCircle2 className="w-4 h-4" /> مكتمل
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-center gap-1 text-red-400 font-bold">
+                                                            <AlertCircle className="w-4 h-4" /> ناقص ({stat.required - stat.scheduled})
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
                         </div>
-                    ))}
-                </div>
-
-                {/* 2. TRAINERS SCHEDULE */}
-                <div className="space-y-4">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-2 border-b border-slate-800 pb-2 mt-12">
-                        <div className="flex items-center gap-2">
-                            <GraduationCap className="w-6 h-6 text-purple-400" />
-                            <h3 className="text-xl font-bold text-white">
-                                توزيع الأساتذة
-                            </h3>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <label className="text-slate-400 text-xs font-bold whitespace-nowrap">اختر المقياس:</label>
-                            <select 
-                                value={viewModuleId} 
-                                onChange={(e) => setViewModuleId(parseInt(e.target.value))}
-                                className="bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm w-64"
-                            >
-                                {MODULES.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
-                                <option value={999}>أعمال تطبيقية / مراجعة</option>
-                            </select>
-                        </div>
                     </div>
-
-                    {visibleDays.map((day, dayIndex) => (
-                        <div key={day.date} className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 overflow-hidden">
-                            <div className="p-3 bg-purple-900/10 border-b border-slate-800">
-                                <h3 className="font-bold text-white text-sm">{formatDate(day.date)}</h3>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-right text-sm">
-                                    <thead>
-                                        <tr className="bg-slate-800/30 text-slate-400">
-                                            <th className="py-2 px-4 w-32">التوقيت</th>
-                                            {getTrainerColumns().map(col => (
-                                                <th key={col.id} className="py-2 px-4 text-center border-l border-slate-700 text-slate-200">
-                                                    {col.label}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {[0,1,2,3,4].map(h => {
-                                            const hourStart = 8 + h;
-                                            return (
-                                                <tr key={h} className="border-t border-slate-800">
-                                                    <td className="py-2 px-4 font-mono text-slate-500">{hourStart}:00</td>
-                                                    {getTrainerColumns().map(col => {
-                                                        const assignment = trainerAssignments.find(a => 
-                                                            a.sessionId === selectedSessionId && 
-                                                            a.moduleId === viewModuleId &&
-                                                            a.dayIndex === dayIndex &&
-                                                            a.hourIndex === h &&
-                                                            a.trainerKey === col.id
-                                                        );
-                                                        
-                                                        if (viewModuleId === 999 && !assignment) {
-                                                            const supAssign = trainerAssignments.find(a => a.sessionId === selectedSessionId && a.moduleId === 999 && a.dayIndex === dayIndex && a.hourIndex === h);
-                                                            if (supAssign) {
-                                                                return (
-                                                                    <td key={col.id} className="py-2 px-2 border-l border-slate-700 text-center">
-                                                                        <div className="bg-amber-900/30 border border-amber-700 rounded px-2 py-1 text-xs text-amber-200">
-                                                                            مشرف عام
-                                                                        </div>
-                                                                    </td>
-                                                                )
-                                                            }
-                                                        }
-
-                                                        if (!assignment) return <td key={col.id} className="border-l border-slate-700"></td>;
-                                                        
-                                                        const parts = assignment.groupId.split('-');
-                                                        const specName = specialties.find(s=>s.id === parts[0])?.name;
-                                                        return (
-                                                            <td key={col.id} className="py-2 px-2 border-l border-slate-700 text-center">
-                                                                <div className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-purple-200">
-                                                                    {specName} - ف {parts[1]}
-                                                                </div>
-                                                            </td>
-                                                        );
-                                                    })}
-                                                </tr>
-                                            )
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* 3. VERIFICATION MATRIX - NEW */}
-                {renderVerificationMatrix()}
-
-                {/* 4. VALIDATION STATS - RESTORED */}
-                <div className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 p-6 mt-8">
-                    <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-4">
-                        <BarChart3 className="w-6 h-6 text-emerald-400" />
-                        <h3 className="text-xl font-bold text-white">إحصائيات التوليد واكتمال النصاب</h3>
-                        {selectedSessionId === 3 && (
-                            <span className="text-xs bg-amber-900/50 text-amber-200 px-2 py-1 rounded border border-amber-800 mr-2">
-                                (تم خصم 20 سا للامتحانات من النصاب)
-                            </span>
-                        )}
-                    </div>
-                    
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-right text-sm">
-                            <thead className="bg-slate-800 text-slate-400">
-                                <tr>
-                                    <th className="p-3">المقياس</th>
-                                    <th className="p-3 text-center">المطلوب (ساعات)</th>
-                                    <th className="p-3 text-center">المجدول (المعدل)</th>
-                                    <th className="p-3 text-center">الحالة</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-700">
-                                {generationStats.map(stat => (
-                                    <tr key={stat.moduleId} className="hover:bg-slate-800/30">
-                                        <td className="p-3 font-bold text-slate-200">{getModuleName(stat.moduleId)}</td>
-                                        <td className="p-3 text-center">{stat.required}</td>
-                                        <td className="p-3 text-center">{stat.scheduled}</td>
-                                        <td className="p-3 text-center">
-                                            {stat.scheduled >= stat.required ? (
-                                                <div className="flex items-center justify-center gap-1 text-emerald-400 font-bold">
-                                                    <CheckCircle2 className="w-4 h-4" /> مكتمل
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center justify-center gap-1 text-red-400 font-bold">
-                                                    <AlertCircle className="w-4 h-4" /> ناقص ({stat.required - stat.scheduled})
-                                                </div>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+                </>
+            )}
         </>
       )}
     </div>

@@ -4,7 +4,6 @@ import Dashboard from './components/Dashboard';
 import CurriculumTable from './components/CurriculumTable';
 import ScheduleView from './components/ScheduleView';
 import TimetableGenerator from './components/TimetableGenerator';
-import TimetableEditor from './components/TimetableEditor';
 import SummaryReport from './components/SummaryReport';
 import TraineeManager from './components/TraineeManager';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -23,7 +22,6 @@ import {
   FileText, 
   Users, 
   Award, 
-  Edit3, 
   HelpCircle, 
   Calculator, 
   BarChart2,
@@ -32,7 +30,7 @@ import {
 
 function App() {
   // --- STATE MANAGEMENT ---
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'schedule' | 'timetable' | 'editor' | 'summary' | 'trainees' | 'evaluation' | 'analytics' | 'certificates'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'curriculum' | 'schedule' | 'timetable' | 'summary' | 'trainees' | 'evaluation' | 'analytics' | 'certificates'>('dashboard');
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [isPrintGuideOpen, setIsPrintGuideOpen] = useState(false);
 
@@ -109,14 +107,7 @@ function App() {
                       <Table className="w-4 h-4" /> <span className="hidden lg:inline">التوزيع</span>
                   </button>
                   
-                  <button 
-                    onClick={() => setActiveTab('editor')} 
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap ${
-                      activeTab === 'editor' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                    }`}
-                  >
-                      <Edit3 className="w-4 h-4" /> <span className="hidden lg:inline">تعديل</span>
-                  </button>
+                  {/* Editor Removed - It is now a sub-tab in Timetable */}
                   
                   <button onClick={() => setActiveTab('trainees')} className={getTabClass('trainees')}>
                       <Users className="w-4 h-4" /> <span className="hidden lg:inline">المتكونون</span>
@@ -172,7 +163,7 @@ function App() {
         {activeTab === 'curriculum' && <CurriculumTable />}
         {activeTab === 'schedule' && <ScheduleView />}
         {activeTab === 'timetable' && <TimetableGenerator />}
-        {activeTab === 'editor' && <TimetableEditor />}
+        {/* TimetableEditor is now imported inside TimetableGenerator */}
         {activeTab === 'summary' && <SummaryReport />}
         {activeTab === 'trainees' && <TraineeManager />}
         {activeTab === 'evaluation' && <EvaluationManager />}
