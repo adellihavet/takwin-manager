@@ -123,8 +123,32 @@ const SummaryReport: React.FC = () => {
         recognition.start();
     };
 
+    // --- UPDATED DYNAMIC PRINT HANDLER ---
     const handlePrint = () => {
-        window.print();
+        // 1. Get the specific content for the report
+        const content = document.getElementById('summary-print-template');
+        // 2. Get the global print section
+        let printSection = document.getElementById('print-section');
+        
+        // Ensure global print section exists
+        if (!printSection) {
+            printSection = document.createElement('div');
+            printSection.id = 'print-section';
+            document.body.appendChild(printSection);
+        }
+        
+        if (content && printSection) {
+            // 3. Clear previous content
+            printSection.innerHTML = '';
+            
+            // 4. Clone and prepare new content
+            const clone = content.cloneNode(true) as HTMLElement;
+            clone.classList.remove('hidden');
+            
+            // 5. Append and Print
+            printSection.appendChild(clone);
+            window.print();
+        }
     };
 
     const handleExportWord = () => {
@@ -317,9 +341,9 @@ const SummaryReport: React.FC = () => {
                 </div>
             </div>
 
-            {/* PRINT VIEW (Hidden by default, visible in print) */}
-            <div id="print-section" className="hidden print:block fixed inset-0 bg-white z-[9999] p-0 text-black overflow-y-auto">
-                <div id="report-content" className="max-w-[210mm] mx-auto p-[20mm] min-h-screen">
+            {/* PRINT TEMPLATE (Hidden always, cloned by handlePrint) */}
+            <div id="summary-print-template" className="hidden">
+                <div id="report-content" className="bg-white text-black p-[20mm] min-h-screen max-w-[210mm] mx-auto">
                      <ReportContent 
                         activeReport={activeReport}
                         data={reports[activeReport]}

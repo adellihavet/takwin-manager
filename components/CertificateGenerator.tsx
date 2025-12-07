@@ -33,7 +33,32 @@ const CertificateGenerator: React.FC = () => {
     }, []);
 
     const filteredTrainees = trainees.filter(t => filterSpecialty === 'all' || t.specialtyId === filterSpecialty);
-    const handlePrint = () => window.print();
+    
+    // --- DYNAMIC PRINT HANDLER (Fixes the issue) ---
+    const handlePrint = () => {
+        const content = document.getElementById('certificates-print-template');
+        let printSection = document.getElementById('print-section');
+        
+        // Ensure the global print section exists
+        if (!printSection) {
+            printSection = document.createElement('div');
+            printSection.id = 'print-section';
+            document.body.appendChild(printSection);
+        }
+        
+        if (content && printSection) {
+            // 1. Clear stale content from other sections
+            printSection.innerHTML = '';
+            
+            // 2. Clone the certificates template
+            const clone = content.cloneNode(true) as HTMLElement;
+            clone.classList.remove('hidden');
+            
+            // 3. Append and Print
+            printSection.appendChild(clone);
+            window.print();
+        }
+    };
 
     return (
         <div className="animate-fadeIn">
@@ -110,10 +135,11 @@ const CertificateGenerator: React.FC = () => {
                 ))}
             </div>
 
-            {/* Actual Print Content */}
-            <div id="print-section" className="hidden print:block fixed inset-0 bg-white z-[9999]">
+            {/* Actual Print Content - HIDDEN TEMPLATE */}
+            {/* ID changed to avoid conflicts. It is cloned by handlePrint. */}
+            <div id="certificates-print-template" className="hidden">
                 {filteredTrainees.map(t => (
-                    <div key={t.id} className="page-break">
+                    <div key={t.id} className="page-break" style={{ pageBreakAfter: 'always' }}>
                         <CertificateCard 
                             trainee={t} 
                             institution={institution} 

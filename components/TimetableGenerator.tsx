@@ -519,7 +519,34 @@ const TimetableGenerator: React.FC = () => {
       return groups;
   };
 
-  const handlePrint = () => window.print();
+  // --- UPDATED DYNAMIC PRINT HANDLER (Fixes ghost document issue) ---
+  const handlePrint = () => {
+      const content = document.getElementById('timetable-print-template');
+      let printSection = document.getElementById('print-section');
+      
+      // Ensure global print section exists
+      if (!printSection) {
+          printSection = document.createElement('div');
+          printSection.id = 'print-section';
+          document.body.appendChild(printSection);
+      }
+      
+      if (content && printSection) {
+          // 1. Clear previous content
+          printSection.innerHTML = '';
+          
+          // 2. Clone the template
+          const clone = content.cloneNode(true) as HTMLElement;
+          
+          // 3. Make visible
+          clone.classList.remove('hidden');
+          clone.style.display = 'block';
+          
+          // 4. Append and Print
+          printSection.appendChild(clone);
+          setTimeout(() => window.print(), 100);
+      }
+  };
 
   const getSessionDaysToRender = () => {
       if (schedule.length === 0) return [];
@@ -925,8 +952,8 @@ const TimetableGenerator: React.FC = () => {
 
             {schedule.length > 0 && (
                 <>
-                    {/* --- PRINT VIEW SECTION --- */}
-                    <div id="print-section" className="hidden print:block text-black">
+                    {/* --- PRINT VIEW SECTION (Renamed to avoid conflicts) --- */}
+                    <div id="timetable-print-template" className="hidden">
                         <div style={{ direction: 'rtl' }}>
                             
                             {/* GROUP PRINT (LANDSCAPE - BALANCED) */}

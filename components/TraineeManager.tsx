@@ -239,7 +239,34 @@ const TraineeManager: React.FC = () => {
         if (window.confirm(`تحذير: حذف الكل؟`)) saveTrainees([]);
     };
 
-    const handlePrintGroup = () => window.print();
+    // --- UPDATED PRINT HANDLER ---
+    const handlePrintGroup = () => {
+        // 1. Get the content template (now with unique ID)
+        const content = document.getElementById('attendance-print-template');
+        // 2. Get the global print section (defined in index.html/App.css logic)
+        let printSection = document.getElementById('print-section');
+        
+        // Ensure print section exists
+        if (!printSection) {
+            printSection = document.createElement('div');
+            printSection.id = 'print-section';
+            document.body.appendChild(printSection);
+        }
+        
+        if (content && printSection) {
+            // 3. Clear previous content to avoid "stale" prints
+            printSection.innerHTML = '';
+            
+            // 4. Clone new content
+            const clone = content.cloneNode(true) as HTMLElement;
+            clone.classList.remove('hidden');
+            clone.style.display = 'block'; // Force visibility
+            
+            // 5. Append and Print
+            printSection.appendChild(clone);
+            window.print();
+        }
+    };
 
     // Filter for main list
     const filteredTrainees = trainees.filter(t => {
@@ -551,52 +578,53 @@ const TraineeManager: React.FC = () => {
                         </table>
                     </div>
 
-                    {/* PRINT TEMPLATE - DAILY SIGNATURE SHEET (OPTIMIZED) */}
-                    <div id="print-section" className="hidden print:block fixed inset-0 bg-white text-black z-[9999] p-8">
-                        <div className="text-center mb-4 border-b-2 border-black pb-2" style={{ direction: 'rtl' }}>
-                            <h3 className="font-bold text-lg">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
-                            <h3 className="font-bold text-lg">وزارة التربية الوطنية</h3>
-                            <div className="flex justify-between mt-2 text-sm font-bold px-4">
-                                <span>مديرية التربية: {institution.wilaya}</span>
-                                <span>مركز التكوين: {institution.center}</span>
+                    {/* PRINT TEMPLATE - CHANGED ID TO AVOID CONFLICTS */}
+                    <div id="attendance-print-template" className="hidden">
+                        <div className="p-8 bg-white text-black h-full" style={{ direction: 'rtl' }}>
+                            <div className="text-center mb-4 border-b-2 border-black pb-2">
+                                <h3 className="font-bold text-lg">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                <h3 className="font-bold text-lg">وزارة التربية الوطنية</h3>
+                                <div className="flex justify-between mt-2 text-sm font-bold px-4">
+                                    <span>مديرية التربية: {institution.wilaya}</span>
+                                    <span>مركز التكوين: {institution.center}</span>
+                                </div>
+                                <h1 className="text-2xl font-black mt-4 border-2 border-black inline-block px-8 py-2 rounded">
+                                    ورقة الحضور اليومية
+                                </h1>
+                                <div className="mt-2 flex justify-around text-lg font-bold">
+                                    <span>التخصص: {specialties.find(s => s.id === selectedGroupSpec)?.name}</span>
+                                    <span>الفـــــوج: {selectedGroupNum}</span>
+                                    <span>التاريخ: {attendanceDate}</span>
+                                </div>
                             </div>
-                            <h1 className="text-2xl font-black mt-4 border-2 border-black inline-block px-8 py-2 rounded">
-                                ورقة الحضور اليومية
-                            </h1>
-                            <div className="mt-2 flex justify-around text-lg font-bold">
-                                <span>التخصص: {specialties.find(s => s.id === selectedGroupSpec)?.name}</span>
-                                <span>الفـــــوج: {selectedGroupNum}</span>
-                                <span>التاريخ: {attendanceDate}</span>
-                            </div>
-                        </div>
 
-                        <table className="w-full border-2 border-black text-center text-sm table-fixed" style={{ direction: 'rtl' }}>
-                            <thead>
-                                <tr className="bg-gray-200 h-10">
-                                    <th className="border border-black p-1 w-[5%]">رقم</th>
-                                    <th className="border border-black p-1 w-[35%]">اللقب والاسم</th>
-                                    <th className="border border-black p-1 w-[15%]">تاريخ الميلاد</th>
-                                    <th className="border border-black p-1 w-[25%]">مؤسسة العمل</th>
-                                    <th className="border border-black p-1 w-[20%]">الإمضاء</th>
-                                    {/* Notes column removed per request to optimize space */}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {groupTrainees.map((t, idx) => (
-                                    <tr key={t.id} className="h-10">
-                                        <td className="border border-black p-1 font-bold">{idx + 1}</td>
-                                        <td className="border border-black p-1 font-bold text-right px-3 whitespace-nowrap overflow-hidden text-ellipsis">{t.surname} {t.name}</td>
-                                        <td className="border border-black p-1">{t.dob}</td>
-                                        <td className="border border-black p-1 text-right px-2 whitespace-nowrap overflow-hidden text-ellipsis">{t.school}</td>
-                                        <td className="border border-black"></td>
+                            <table className="w-full border-2 border-black text-center text-sm table-fixed">
+                                <thead>
+                                    <tr className="bg-gray-200 h-10">
+                                        <th className="border border-black p-1 w-[5%]">رقم</th>
+                                        <th className="border border-black p-1 w-[35%]">اللقب والاسم</th>
+                                        <th className="border border-black p-1 w-[15%]">تاريخ الميلاد</th>
+                                        <th className="border border-black p-1 w-[25%]">مؤسسة العمل</th>
+                                        <th className="border border-black p-1 w-[20%]">الإمضاء</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {groupTrainees.map((t, idx) => (
+                                        <tr key={t.id} className="h-10">
+                                            <td className="border border-black p-1 font-bold">{idx + 1}</td>
+                                            <td className="border border-black p-1 font-bold text-right px-3 whitespace-nowrap overflow-hidden text-ellipsis">{t.surname} {t.name}</td>
+                                            <td className="border border-black p-1">{t.dob}</td>
+                                            <td className="border border-black p-1 text-right px-2 whitespace-nowrap overflow-hidden text-ellipsis">{t.school}</td>
+                                            <td className="border border-black"></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
 
-                        <div className="mt-8 flex justify-between px-12 font-bold text-lg">
-                            <div>إمضاء الأستاذ المكون</div>
-                            <div>المدير البيداغوجي</div>
+                            <div className="mt-8 flex justify-between px-12 font-bold text-lg">
+                                <div>إمضاء الأستاذ المكون</div>
+                                <div>المدير البيداغوجي</div>
+                            </div>
                         </div>
                     </div>
                 </div>

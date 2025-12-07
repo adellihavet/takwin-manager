@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { X, ChevronRight, ChevronLeft, Database, LayoutDashboard, Users, Table, FileText, CheckCircle2, Edit3, Calculator, Printer, Award } from 'lucide-react';
 
