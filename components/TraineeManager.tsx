@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X } from 'lucide-react';
+import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig, AttendanceRecord } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES } from '../constants';
 
@@ -280,6 +280,15 @@ const TraineeManager: React.FC = () => {
         .filter(t => t.specialtyId === selectedGroupSpec && t.groupId === selectedGroupNum)
         .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
 
+    // --- Logistics Stats ---
+    const getStats = () => {
+        const total = filteredTrainees.length;
+        const males = filteredTrainees.filter(t => t.gender === 'M').length;
+        const females = filteredTrainees.filter(t => t.gender === 'F').length;
+        return { total, males, females };
+    };
+    const stats = getStats();
+
     return (
         <div className="space-y-6 animate-fadeIn">
             
@@ -333,6 +342,22 @@ const TraineeManager: React.FC = () => {
                                 <Plus className="w-4 h-4"/> إضافة
                             </button>
                             {trainees.length > 0 && <button onClick={handleDeleteAll} className="btn-danger flex gap-2 items-center bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Trash2 className="w-4 h-4"/> حذف الكل</button>}
+                        </div>
+                    </div>
+
+                    {/* Logistics Stats (New) */}
+                    <div className="grid grid-cols-3 gap-4 mb-2 print:hidden">
+                        <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700 flex justify-between items-center">
+                            <span className="text-slate-400 text-xs font-bold">المجموع (للقائمة الحالية)</span>
+                            <span className="text-white font-bold">{stats.total}</span>
+                        </div>
+                        <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-500/20 flex justify-between items-center">
+                            <span className="text-blue-400 text-xs font-bold">ذكور</span>
+                            <span className="text-blue-200 font-bold">{stats.males}</span>
+                        </div>
+                        <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-500/20 flex justify-between items-center">
+                            <span className="text-pink-400 text-xs font-bold">إناث</span>
+                            <span className="text-pink-200 font-bold">{stats.females}</span>
                         </div>
                     </div>
 

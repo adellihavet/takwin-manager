@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Printer, Filter, Calendar } from 'lucide-react';
+import { Printer, Filter, Calendar, PenTool } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES } from '../constants';
 
@@ -86,11 +86,11 @@ const CertificateGenerator: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-800/50 p-6 rounded-xl border border-slate-700">
                     <div className="space-y-2">
                         <label className="text-slate-300 font-bold text-sm flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-amber-400" />
-                            تاريخ محضر المداولات (يكتب يدوياً):
+                            تاريخ محضر المداولات:
                         </label>
                         <input 
                             type="text" 
@@ -103,11 +103,24 @@ const CertificateGenerator: React.FC = () => {
 
                     <div className="space-y-2">
                         <label className="text-slate-300 font-bold text-sm flex items-center gap-2">
+                            <PenTool className="w-4 h-4 text-emerald-400" />
+                            تاريخ تحرير الشهادة:
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none focus:border-emerald-500 text-right"
+                            value={signatureDate}
+                            onChange={e => setSignatureDate(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-slate-300 font-bold text-sm flex items-center gap-2">
                             <Filter className="w-4 h-4 text-blue-400" />
                             تصفية حسب التخصص:
                         </label>
                         <select 
-                            className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
+                            className="w-full bg-slate-950 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none focus:border-blue-500"
                             value={filterSpecialty}
                             onChange={e => setFilterSpecialty(e.target.value)}
                         >

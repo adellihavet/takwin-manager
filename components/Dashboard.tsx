@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2 } from 'lucide-react';
+import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2, CheckCircle2, XCircle, Activity, AlertTriangle, Trash2, ArrowRight, BarChart3, GraduationCap, Clock, RefreshCw } from 'lucide-react';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS, MODULES } from '../constants';
 import { Specialty, TrainerConfig, ProjectDatabase, InstitutionConfig, Trainee, AttendanceRecord } from '../types';
 import { downloadJSON, readJSONFile } from '../utils';
@@ -10,6 +10,7 @@ const Dashboard: React.FC = () => {
   const [specialties, setSpecialties] = useState<Specialty[]>(DEFAULT_SPECIALTIES);
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord>({});
+  const [scheduleExists, setScheduleExists] = useState(false);
   
   // State for editing mode
   const [isEditing, setIsEditing] = useState(false);
@@ -34,60 +35,6 @@ const Dashboard: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper function to reload all data from localStorage
-  const refreshAllData = () => {
-    setIsRefreshing(true);
-    let loadedTraineesCount = 0;
-    let loadedAbsenceCount = 0;
-
-    try {
-        const savedData = localStorage.getItem('takwin_specialties_db');
-        if (savedData) {
-            const parsed = JSON.parse(savedData);
-            setSpecialties(parsed);
-            setEditData(parsed);
-        }
-
-        const savedInst = localStorage.getItem('takwin_institution_db');
-        if (savedInst) {
-            const parsed = JSON.parse(savedInst);
-            setInstitution(parsed);
-            setEditInstitution(parsed);
-        }
-
-        const savedTrainers = localStorage.getItem('takwin_trainers_db');
-        if (savedTrainers) {
-            const parsed = JSON.parse(savedTrainers);
-            setTrainerConfig(parsed);
-            setEditTrainerConfig(parsed);
-        }
-
-        const savedTrainees = localStorage.getItem('takwin_trainees_db');
-        if (savedTrainees) {
-            const parsed = JSON.parse(savedTrainees);
-            setTrainees(parsed); 
-            loadedTraineesCount = parsed.length;
-        }
-
-        const savedAtt = localStorage.getItem('takwin_attendance_db');
-        if (savedAtt) {
-            const parsed = JSON.parse(savedAtt);
-            setAttendance(parsed); 
-            loadedAbsenceCount = Object.values(parsed).filter(x => x === 'A').length;
-        }
-
-        setTimeout(() => {
-            setIsRefreshing(false);
-            alert(`تم تحديث البيانات!\n\n- عدد المتربصين: ${loadedTraineesCount}\n- عدد الغيابات المسجلة: ${loadedAbsenceCount}`);
-        }, 300);
-
-    } catch (e) {
-        console.error(e);
-        setIsRefreshing(false);
-        alert('حدث خطأ أثناء تحديث البيانات');
-    }
-  };
-
   // Load from local storage on mount
   useEffect(() => {
     const savedData = localStorage.getItem('takwin_specialties_db');
@@ -104,7 +51,26 @@ const Dashboard: React.FC = () => {
 
     const savedAtt = localStorage.getItem('takwin_attendance_db');
     if (savedAtt) try { setAttendance(JSON.parse(savedAtt)); } catch(e){}
+
+    const savedSched = localStorage.getItem('takwin_schedule');
+    if (savedSched) setScheduleExists(true);
   }, []);
+
+  // --- FACTORY RESET (New Cycle) ---
+  const handleFactoryReset = () => {
+      if (confirm("هل أنت متأكد أنك تريد بدء موسم جديد؟\n\nسيتم مسح جميع البيانات (المتربصين، النقاط، الجداول، الأسماء) والبدء من الصفر.\n\nيرجى تصدير قاعدة البيانات الحالية كنسخة احتياطية قبل المتابعة.")) {
+          localStorage.clear();
+          location.reload();
+      }
+  };
+
+  // --- RESET ATTENDANCE ONLY ---
+  const handleResetAttendance = () => {
+      if (confirm("هل أنت متأكد من تصفير سجل الغيابات؟\nسيتم حذف جميع الغيابات المسجلة سابقاً (العدد سيصبح 0).")) {
+          setAttendance({});
+          localStorage.removeItem('takwin_attendance_db');
+      }
+  };
 
   // Database Handlers
   const handleExportDB = () => {
@@ -131,7 +97,7 @@ const Dashboard: React.FC = () => {
       reports,
       trainees,
       attendance,
-      version: '1.5',
+      version: '1.6',
       savedAt: new Date().toISOString()
     };
     downloadJSON(db, `takwin_db_${institution.wilaya || 'project'}_${new Date().toISOString().split('T')[0]}.json`);
@@ -166,7 +132,10 @@ const Dashboard: React.FC = () => {
         localStorage.setItem('takwin_trainers_db', JSON.stringify(db.trainerConfig));
       }
       
-      if (db.schedule) localStorage.setItem('takwin_schedule', JSON.stringify(db.schedule));
+      if (db.schedule) {
+          localStorage.setItem('takwin_schedule', JSON.stringify(db.schedule));
+          setScheduleExists(true);
+      }
       if (db.assignments) localStorage.setItem('takwin_assignments', JSON.stringify(db.assignments));
       if (db.reports) localStorage.setItem('takwin_reports_db', JSON.stringify(db.reports));
       
@@ -271,13 +240,107 @@ const Dashboard: React.FC = () => {
       }));
   };
 
-  const totalTrainees = specialties.reduce((acc, curr) => acc + curr.count, 0);
+  // --- STATS CALCULATION ---
+  const totalTrainees = trainees.length > 0 ? trainees.length : specialties.reduce((acc, curr) => acc + curr.count, 0);
   const totalGroups = specialties.reduce((acc, curr) => acc + curr.groups, 0);
   const totalHours = SESSIONS.reduce((acc, curr) => acc + curr.hoursTotal, 0);
+  
+  // Demographics
+  const maleCount = trainees.filter(t => t.gender === 'M').length;
+  const femaleCount = trainees.filter(t => t.gender === 'F').length;
+  const malePercent = totalTrainees > 0 ? (maleCount / totalTrainees) * 100 : 50;
+
+  // Absences
+  const totalAbsences = Object.values(attendance).filter(status => status === 'A').length;
+  const absenceStatus = totalAbsences === 0 ? 'ممتاز' : totalAbsences < 10 ? 'جيد' : 'مقلق';
+  const absenceColor = totalAbsences === 0 ? 'text-emerald-400' : totalAbsences < 10 ? 'text-amber-400' : 'text-red-400';
+
+  // Unique Trainers
+  const getUniqueTrainersCount = () => {
+      const names = new Set<string>();
+      Object.values(trainerConfig).forEach(conf => {
+          if (conf.names) {
+              Object.values(conf.names).forEach((name: unknown) => {
+                  if (typeof name === 'string' && name.trim().length > 1) {
+                      names.add(name.trim().toLowerCase());
+                  }
+              });
+          }
+      });
+      return names.size;
+  };
+  const activeTrainersCount = getUniqueTrainersCount();
+
+  // --- READINESS CALCULATION ---
+  const calculateReadiness = () => {
+      const steps = [
+          { label: 'إدخال بيانات المؤسسة', done: !!(institution.wilaya && institution.center) },
+          { label: 'استيراد قائمة المتربصين', done: trainees.length > 0 },
+          { label: 'ضبط عدد الأفواج', done: totalGroups > 0 },
+          { label: 'تعيين الأسماء للطاقم البيداغوجي', done: Object.keys(trainerConfig).length > 0 },
+          { label: 'توليد جدول التوقيت', done: scheduleExists }
+      ];
+      const completed = steps.filter(s => s.done).length;
+      const percent = Math.round((completed / steps.length) * 100);
+      return { steps, percent };
+  };
+  const readiness = calculateReadiness();
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
       
+      {/* 0. READINESS MONITOR (Manager's View) */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-6 rounded-2xl shadow-xl border border-slate-700 relative overflow-hidden">
+          <div className="flex flex-col md:flex-row gap-8 items-center relative z-10">
+              {/* Progress Circle */}
+              <div className="relative w-32 h-32 flex items-center justify-center shrink-0">
+                  <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="12" fill="transparent" className="text-slate-800" />
+                      <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="12" fill="transparent" 
+                          strokeDasharray={351} strokeDashoffset={351 - (351 * readiness.percent) / 100}
+                          className={`${readiness.percent === 100 ? 'text-emerald-500' : 'text-blue-500'} transition-all duration-1000 ease-out`} 
+                          strokeLinecap="round"
+                      />
+                  </svg>
+                  <div className="absolute flex flex-col items-center">
+                      <span className="text-3xl font-black text-white">{readiness.percent}%</span>
+                      <span className="text-[10px] text-slate-400">جاهزية الدورة</span>
+                  </div>
+              </div>
+
+              {/* Checklist */}
+              <div className="flex-1 w-full">
+                  <div className="flex justify-between items-start mb-4">
+                      <div>
+                          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                              <Activity className="text-blue-400" />
+                              مؤشر تحضير العملية التكوينية
+                          </h2>
+                          <p className="text-slate-400 text-sm">تابع مدى تقدمك في إعداد البيانات قبل الانطلاق الرسمي</p>
+                      </div>
+                      <button 
+                          onClick={handleFactoryReset}
+                          className="flex items-center gap-2 bg-red-900/30 hover:bg-red-900/50 text-red-200 px-4 py-2 rounded-lg text-xs font-bold border border-red-900/50 transition-colors"
+                      >
+                          <Trash2 className="w-4 h-4" /> بدء موسم جديد (تصفير)
+                      </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {readiness.steps.map((step, idx) => (
+                          <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl border ${step.done ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-slate-900/50 border-slate-700'}`}>
+                              {step.done 
+                                  ? <div className="p-1 bg-emerald-500 rounded-full"><CheckCircle2 className="w-3 h-3 text-white" /></div>
+                                  : <div className="p-1 bg-slate-700 rounded-full"><XCircle className="w-3 h-3 text-slate-400" /></div>
+                              }
+                              <span className={`text-sm font-medium ${step.done ? 'text-emerald-100' : 'text-slate-400'}`}>{step.label}</span>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+          </div>
+      </div>
+
       {/* 1. Institution Info Card */}
       <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-dzgreen-600 to-dzgreen-800"></div>
@@ -394,68 +457,105 @@ const Dashboard: React.FC = () => {
           </div>
       </div>
 
-      {/* 2. Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 flex items-center justify-between hover:border-blue-500/30 transition-colors group">
-          <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">مجموع الأساتذة</p>
-            <h3 className="text-3xl font-bold text-white group-hover:text-blue-400 transition-colors">
-                {trainees.length > 0 ? trainees.length : totalTrainees}
-            </h3>
+      {/* 2. VITAL INDICATORS (New Replaces Old Stats) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        
+        {/* CARD 1: Human Resources (Trainees + Demographics) */}
+        <div className="bg-slate-900/80 backdrop-blur p-5 rounded-2xl shadow-lg border border-slate-800/60 hover:border-blue-500/30 transition-all group relative overflow-hidden">
+          <div className="flex justify-between items-start mb-2 relative z-10">
+            <div>
+              <p className="text-slate-400 text-xs font-bold mb-1">تعداد المتكونين</p>
+              <h3 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors">
+                  {totalTrainees}
+              </h3>
+            </div>
+            <div className="p-2 bg-blue-500/10 rounded-lg group-hover:bg-blue-500/20 transition-colors">
+              <Users className="w-5 h-5 text-blue-400" />
+            </div>
           </div>
-          <div className="p-3 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors">
-            <Users className="w-6 h-6 text-blue-400" />
+          {/* Mini Bar Chart */}
+          <div className="mt-3 relative z-10">
+              <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-bold">
+                  <span>ذكور ({maleCount})</span>
+                  <span>إناث ({femaleCount})</span>
+              </div>
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-blue-500" style={{ width: `${malePercent}%` }}></div>
+                  <div className="h-full bg-pink-500" style={{ width: `${100 - malePercent}%` }}></div>
+              </div>
           </div>
         </div>
-        <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 flex items-center justify-between hover:border-emerald-500/30 transition-colors group">
-          <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">عدد الأفواج</p>
-            <h3 className="text-3xl font-bold text-white group-hover:text-emerald-400 transition-colors">{totalGroups}</h3>
+
+        {/* CARD 2: Pedagogical Staff (Real Count) */}
+        <div className="bg-slate-900/80 backdrop-blur p-5 rounded-2xl shadow-lg border border-slate-800/60 hover:border-purple-500/30 transition-all group">
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <p className="text-slate-400 text-xs font-bold mb-1">الطاقم البيداغوجي</p>
+              <h3 className="text-2xl font-black text-white group-hover:text-purple-400 transition-colors">
+                  {activeTrainersCount > 0 ? activeTrainersCount : '--'}
+              </h3>
+            </div>
+            <div className="p-2 bg-purple-500/10 rounded-lg group-hover:bg-purple-500/20 transition-colors">
+              <GraduationCap className="w-5 h-5 text-purple-400" />
+            </div>
           </div>
-          <div className="p-3 bg-emerald-500/10 rounded-xl group-hover:bg-emerald-500/20 transition-colors">
-            <Layers className="w-6 h-6 text-emerald-400" />
-          </div>
+          <p className="text-[10px] text-slate-500 mt-2">
+              عدد المكونين الفعليين (بدون تكرار)
+          </p>
         </div>
-        <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 flex items-center justify-between hover:border-amber-500/30 transition-colors group">
-          <div>
-            <p className="text-slate-400 text-sm font-medium mb-1">الحجم الساعي</p>
-            <h3 className="text-3xl font-bold text-white group-hover:text-amber-400 transition-colors">{totalHours} <span className="text-sm font-normal text-slate-500">سا</span></h3>
+
+        {/* CARD 3: Absence Analytics */}
+        <div className="bg-slate-900/80 backdrop-blur p-5 rounded-2xl shadow-lg border border-slate-800/60 hover:border-red-500/30 transition-all group">
+          <div className="flex justify-between items-start mb-2">
+            <div>
+              <p className="text-slate-400 text-xs font-bold mb-1">مؤشر الغياب</p>
+              <h3 className={`text-2xl font-black transition-colors ${absenceColor}`}>
+                  {totalAbsences}
+              </h3>
+            </div>
+            <div className="flex gap-2">
+                {totalAbsences > 0 && (
+                    <button 
+                        onClick={handleResetAttendance}
+                        title="تصفير الغيابات (حذف السجل)"
+                        className="p-1.5 bg-slate-800 hover:bg-red-900/50 rounded-lg group-hover:text-red-400 text-slate-500 transition-colors"
+                    >
+                        <RefreshCw className="w-4 h-4" />
+                    </button>
+                )}
+                <div className="p-2 bg-red-500/10 rounded-lg group-hover:bg-red-500/20 transition-colors">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+            </div>
           </div>
-          <div className="p-3 bg-amber-500/10 rounded-xl group-hover:bg-amber-500/20 transition-colors">
-            <Calendar className="w-6 h-6 text-amber-400" />
+          <div className="flex items-center gap-2 mt-2">
+              <span className={`w-2 h-2 rounded-full ${totalAbsences === 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+              <p className="text-[10px] text-slate-400 font-bold">الحالة: {absenceStatus}</p>
           </div>
         </div>
         
-        {/* Database Card */}
-        <div className="bg-slate-900/80 backdrop-blur p-6 rounded-2xl shadow-lg border border-slate-800/60 flex flex-col justify-center gap-2 hover:border-red-500/30 transition-colors group">
-            <h3 className="text-slate-200 font-bold flex items-center gap-2">
-                <Database className="w-4 h-4 text-red-400" />
-                قاعدة بيانات المشروع
-            </h3>
-            <div className="flex gap-2 w-full mt-1">
-                <button 
-                    onClick={handleExportDB}
-                    title="حفظ قاعدة البيانات"
-                    className="flex-1 flex items-center justify-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs py-2 rounded-lg transition-colors border border-slate-700"
-                >
-                    <Download className="w-3.5 h-3.5" />
-                    حفظ
+        {/* CARD 4: Database & Logistics */}
+        <div className="bg-slate-900/80 backdrop-blur p-5 rounded-2xl shadow-lg border border-slate-800/60 hover:border-emerald-500/30 transition-all group flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+                <div>
+                    <p className="text-slate-400 text-xs font-bold mb-1">الحجم الساعي / الأفواج</p>
+                    <div className="flex items-baseline gap-2">
+                        <h3 className="text-xl font-black text-white">{totalHours} سا</h3>
+                        <span className="text-xs text-slate-500">/ {totalGroups} فوج</span>
+                    </div>
+                </div>
+                <div className="p-2 bg-emerald-500/10 rounded-lg">
+                    <Clock className="w-5 h-5 text-emerald-400" />
+                </div>
+            </div>
+            <div className="flex gap-2 mt-2 pt-2 border-t border-slate-800/50">
+                <button onClick={handleExportDB} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] py-1.5 rounded transition-colors border border-slate-700">
+                    <Download className="w-3 h-3 inline mx-1" /> حفظ DB
                 </button>
-                <button 
-                    onClick={handleImportClick}
-                    title="استيراد قاعدة البيانات"
-                    className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded-lg transition-colors shadow-lg shadow-blue-900/20"
-                >
-                    <Upload className="w-3.5 h-3.5" />
-                    استيراد
+                <button onClick={handleImportClick} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1.5 rounded transition-colors">
+                    <Upload className="w-3 h-3 inline mx-1" /> استيراد
                 </button>
-                <input 
-                    type="file" 
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept=".json"
-                    onChange={handleFileChange}
-                />
+                <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleFileChange} />
             </div>
         </div>
       </div>

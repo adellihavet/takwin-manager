@@ -1,3 +1,4 @@
+
 import { Specialty, SessionInfo, Module, Distribution, ModuleContent } from './types';
 
 export const SPECIALTIES: Specialty[] = [
@@ -11,10 +12,10 @@ export const SESSIONS: SessionInfo[] = [
   { 
     id: 1, 
     name: 'الدورة الأولى', 
-    startDate: '2025-12-20', 
+    startDate: '2025-12-21', // تم التعديل: البداية الأحد 21 ديسمبر
     endDate: '2025-12-31', 
-    daysCount: 11, 
-    hoursTotal: 55,
+    daysCount: 10, // تم التعديل: نقص يوم واحد
+    hoursTotal: 50, // تم التعديل: 50 ساعة بدل 55
     description: 'المرحلة الأولى: التأسيس المعرفي واكتساب المفاهيم القاعدية في جميع المقاييس'
   },
   { 
@@ -29,10 +30,10 @@ export const SESSIONS: SessionInfo[] = [
   { 
     id: 3, 
     name: 'الدورة الثالثة', 
-    startDate: '2026-07-01', 
+    startDate: '2026-06-30', // تم التعديل: البداية الثلاثاء 30 جوان
     endDate: '2026-07-22', 
-    daysCount: 18, 
-    hoursTotal: 85,
+    daysCount: 19, // تم التعديل: زيادة يوم واحد
+    hoursTotal: 70, // تم التعديل: 70 ساعة (تم التصحيح من 90)
     description: 'المرحلة الثالثة: الإدماج المهني، التقويم الشامل والمشاريع الختامية'
   },
 ];
@@ -123,27 +124,27 @@ export const MODULES: (Module & { coefficient: number })[] = [
 export const REVISED_MODULES: Module[] = MODULES;
 
 export const CORRECTED_DISTRIBUTION: Distribution[] = [
-  // Session 1 (55h) | Session 2 (50h) | Session 3 (85h)
-  { moduleId: 1, s1: 12, s2: 10, s3: 18 },
-  { moduleId: 2, s1: 6, s2: 6, s3: 8 },
-  { moduleId: 3, s1: 6, s2: 6, s3: 8 },
-  { moduleId: 4, s1: 6, s2: 6, s3: 8 },
-  { moduleId: 5, s1: 4, s2: 3, s3: 3 },
-  { moduleId: 6, s1: 2, s2: 4, s3: 4 },
-  { moduleId: 7, s1: 4, s2: 3, s3: 3 },
-  { moduleId: 8, s1: 7, s2: 6, s3: 12 },
-  { moduleId: 9, s1: 0, s2: 0, s3: 10 },
-  { moduleId: 10, s1: 8, s2: 6, s3: 11 },
+  // Session 1 (50h) | Session 2 (50h) | Session 3 (70h)
+  // التعديل: نقل 5 ساعات من الدورة الأولى إلى الدورة الثالثة لضبط الحجم الساعي
+  { moduleId: 1, s1: 10, s2: 10, s3: 18 }, // تم التعديل
+  { moduleId: 2, s1: 6, s2: 6, s3: 6 },
+  { moduleId: 3, s1: 6, s2: 6, s3: 6 },
+  { moduleId: 4, s1: 6, s2: 6, s3: 6 },
+  { moduleId: 5, s1: 4, s2: 3, s3: 1 },
+  { moduleId: 6, s1: 2, s2: 4, s3: 2 },
+  { moduleId: 7, s1: 4, s2: 3, s3: 1 },
+  { moduleId: 8, s1: 6, s2: 6, s3: 11 }, // تم التعديل
+  { moduleId: 9, s1: 0, s2: 0, s3: 8 },
+  { moduleId: 10, s1: 6, s2: 6, s3: 11 }, // تم التعديل
 ];
 
 /**
  * Detailed Syllabus extracted EXACTLY from the provided PDF sequence.
- * Content is strictly verbatim.
- * Durations are bucketed to fit S1, S2, S3 capacities.
+ * Content updated to reflect the new hourly distribution (Shifted topics from S1 to S3).
  */
 export const MODULE_CONTENTS: ModuleContent[] = [
     {
-        // Total: 40h | S1: 12h | S2: 10h | S3: 18h
+        // Total: 40h | S1: 10h | S2: 10h | S3: 18h
         moduleId: 1, 
         s1Topics: [
             // PDF Page 1 Col 1
@@ -152,7 +153,7 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "التخطيط لحصة تعلمية - تعليمية", duration: 2 },
             { topic: "تمثيل الأدوار", duration: 2 },
             { topic: "استغلال السندات البيداغوجية", duration: 2 },
-            { topic: "تصنيف الأفعال السلوكية", duration: 2 } // = 12h
+            // تم النقل: "تصنيف الأفعال السلوكية" نقلت للدورة 3
         ],
         s2Topics: [
             // PDF Page 1 Col 1 Bottom
@@ -164,8 +165,9 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "التخطيط لأسبوع الادماج", duration: 2 } // = 10h
         ],
         s3Topics: [
+            { topic: "تصنيف الأفعال السلوكية", duration: 2 }, // منقولة من الدورة 1
             // PDF Page 1 Col 2 Continued
-            { topic: "طرائق التدريس", duration: 2 }, // Added specifically
+            { topic: "طرائق التدريس", duration: 2 }, 
             { topic: "طرائق التدريس الحديثة", duration: 2 },
             { topic: "التقويم التربوي الفعال", duration: 2 },
             { topic: "التعلم التعاوني", duration: 2 },
@@ -173,12 +175,11 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "مهارات القرن 21", duration: 2 },
             { topic: "التواصل الفعال", duration: 2 },
             { topic: "الوسائل التعليمية", duration: 2 },
-            { topic: "انجاز وسيلة بيداغوجية", duration: 2 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 18h
+            { topic: "انجاز وسيلة بيداغوجية", duration: 2 }
         ]
     },
     {
-        // Total: 20h | S1: 6h | S2: 6h | S3: 8h
+        // Total: 20h | S1: 6h | S2: 6h | S3: 6h
         moduleId: 2, 
         s1Topics: [
             // PDF Page 1 Col 1 Bottom
@@ -196,12 +197,11 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             // PDF Page 1 Col 3 Bottom
             { topic: "مكونات المنهاج", duration: 2 },
             { topic: "أنواع المناهج والعوامل المؤثرة فيها", duration: 2 },
-            { topic: "تقويم المناهج", duration: 2 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // Added strictly as per PDF
+            { topic: "تقويم المناهج", duration: 2 }
         ]
     },
     {
-        // Total: 20h | S1: 6h | S2: 6h | S3: 8h
+        // Total: 20h | S1: 6h | S2: 6h | S3: 6h
         moduleId: 3, 
         s1Topics: [
             // PDF Page 2 Col 1
@@ -221,12 +221,11 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "المشكلاتت النفسية والتربوية للطفولة (العزلة والانطواء/ السرقة والعنف/ مخاوف الطفال)", duration: 2 },
             { topic: "المشكلات النفسية والتربوية للطفولة (التأخر الدراسي/ الرسوب المدرسي/ التسرب المدرسي)", duration: 2 },
             // PDF Page 2 Col 3
-            { topic: "الشخصية / القيادة / دينامية الجماعة", duration: 2 },
-            { topic: "/ تقويم نهاية التكوين", duration: 2 } // Combined end eval to fit
+            { topic: "الشخصية / القيادة / دينامية الجماعة", duration: 2 }            
         ]
     },
     {
-        // Total: 20h | S1: 6h | S2: 6h | S3: 8h
+        // Total: 20h | S1: 6h | S2: 6h | S3: 6h
         moduleId: 4, 
         s1Topics: [
             // PDF Page 2 Col 1 Bottom
@@ -245,12 +244,11 @@ export const MODULE_CONTENTS: ModuleContent[] = [
              // PDF Page 2 Col 3 Bottom
             { topic: "المجالس", duration: 2 },
             { topic: "التأمينات االجتماعية وحوادث العمل", duration: 2 },
-            { topic: "الأعمال المكملة للمدرسة / الثقافة العامة للأستاذ", duration: 2 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 8h
+            { topic: "الأعمال المكملة للمدرسة / الثقافة العامة للأستاذ", duration: 2 }
         ]
     },
     {
-        // Total: 10h | S1: 4h | S2: 3h | S3: 3h
+        // Total: 10h | S1: 4h | S2: 3h | S3: 1h
         moduleId: 5, 
         s1Topics: [
              // PDF Page 3 Col 1
@@ -264,36 +262,34 @@ export const MODULE_CONTENTS: ModuleContent[] = [
         ],
         s3Topics: [
              // PDF Page 3 Col 3
-            { topic: "الحق و الواجب و الجماعة التربوية", duration: 1.5 },
-            { topic: "تقويم نهاية التكوين", duration: 1.5 } // = 3h
+            { topic: "الحق و الواجب و الجماعة التربوية", duration: 1 }
+
         ]
     },
     {
-        // Total: 10h | S1: 2h | S2: 4h | S3: 4h
+        // Total: 10h | S1: 2h | S2: 4h | S3: 2h
         moduleId: 6, 
         s1Topics: [
              // PDF Page 3 Col 1
-            { topic: "الوساطة المدرسية", duration: 2 } // = 2h
+            { topic: "الوساطة المدرسية", duration: 2 }
         ],
         s2Topics: [
              // PDF Page 3 Col 2
             { topic: "الوسيط التربوي", duration: 2 },
-            { topic: "أساليب الوقاية من النزاعات المدرسية", duration: 2 } // = 4h
+            { topic: "أساليب الوقاية من النزاعات المدرسية", duration: 2 }
         ],
         s3Topics: [
              // PDF Page 3 Col 2 Bottom
-            { topic: "الوساطة البيداغوجية ", duration: 2 },
-             // PDF Page 3 Col 3
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 4h
+            { topic: "الوساطة البيداغوجية ", duration: 2 }
         ]
     },
     {
-        // Total: 10h | S1: 4h | S2: 3h | S3: 3h
+        // Total: 10h | S1: 4h | S2: 3h | S3: 1h
         moduleId: 7, 
         s1Topics: [
              // PDF Page 3 Col 1
             { topic: "ادارة الصف 1", duration: 2 },
-            { topic: "ادارة الصف 2", duration: 2 } // = 4h
+            { topic: "ادارة الصف 2", duration: 2 } 
         ],
         s2Topics: [
              // PDF Page 3 Col 1 Bottom
@@ -302,20 +298,19 @@ export const MODULE_CONTENTS: ModuleContent[] = [
         ],
         s3Topics: [
              // PDF Page 3 Col 2
-            { topic: "المقطع التعلمي ونماذج تطبيقية لاستغلال الكتاب المدرسي", duration: 1 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 3h
+            { topic: "المقطع التعلمي ونماذج تطبيقية لاستغلال الكتاب المدرسي", duration: 1 }
         ]
     },
     {
-        // Total: 25h | S1: 7h | S2: 6h | S3: 12h
+        // Total: 25h | S1: 6h | S2: 6h | S3: 11h
         // Includes Annex Content in S3
         moduleId: 8, 
         s1Topics: [
             // PDF Page 3 Col 1 Bottom
-            { topic: "مفهوم التقويم", duration: 1.5 },
+            { topic: "مفهوم التقويم", duration: 2 }, // Adjusted to 2h to fit 6h total (was 1.5)
             { topic: "أنواع التقويم ووسائله", duration: 2 },
             { topic: "المعالجة البيداغوجية وأنواعها", duration: 2 },
-            { topic: "تغذية راجعة / المقوم الجيد", duration: 1.5 } // = 7h
+            // تم النقل: "تغذية راجعة / المقوم الجيد" نقلت للدورة 3
         ],
         s2Topics: [
             // PDF Page 3 Col 2 Bottom
@@ -324,6 +319,7 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "المعالجة/ مصادره و خطوات المعالجة", duration: 2 } // = 6h
         ],
         s3Topics: [
+            { topic: "تغذية راجعة / المقوم الجيد", duration: 1 }, // منقولة من الدورة 1
             // PDF Page 3 Col 3 Bottom
             { topic: "الاختبارات / أشكالها / مزاياها / بناء الاختبارات", duration: 2 },
             { topic: "تصورات حول مفهوم المعالجة و أنماطها", duration: 2 },
@@ -332,12 +328,11 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "تقييم المكتسبات وفق متطلبات المناهج", duration: 1 },
             { topic: "الكفاءات المعنية بالتقييم / الأنماط المعتمدة", duration: 1 },
             { topic: "معايير التقييم / شروط إعداد المواضيع", duration: 1 },
-            { topic: "الشبكات التحليلية/ نماذج من مواضيع التقييم/ دفتر تقييم المكتسبات", duration: 1 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 12h
+            { topic: "الشبكات التحليلية/ نماذج من مواضيع التقييم/ دفتر تقييم المكتسبات", duration: 1 }
         ]
     },
     {
-        // Total: 10h | S1: 0h | S2: 0h | S3: 10h
+        // Total: 10h | S1: 0h | S2: 0h | S3: 8h
         moduleId: 9, 
         s1Topics: [],
         s2Topics: [],
@@ -347,19 +342,18 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "تحليل المهام", duration: 2 },
             // PDF Page 4 Col 3
             { topic: "الجودة والضمان / التخطيط / التقويم / ادارة حلقة الجودة/ السبب والأثر بين التعليم والتعلم", duration: 2 },
-            { topic: "خطة التطوير (المحتويات / المراحل / طريقة التكوين)", duration: 2 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 10h
+            { topic: "خطة التطوير (المحتويات / المراحل / طريقة التكوين)", duration: 2 }
         ]
     },
     {
-        // Total: 25h | S1: 8h | S2: 6h | S3: 11h
+        // Total: 25h | S1: 6h | S2: 6h | S3: 11h
         moduleId: 10, 
         s1Topics: [
             // PDF Page 4 Col 1
             { topic: "ادماج تكنولوجيات الاعلام والاتصال في التعليم", duration: 2 },
             { topic: "استخدام الحاسوب وادارة الملفات", duration: 2 },
             { topic: "انتاج وثيقة تتضمن النص أو الصورة", duration: 2 },
-            { topic: "الابحار والبحث في شبكة الأنترنت", duration: 2 } // = 8h
+            // تم النقل: "الابحار والبحث في شبكة الأنترنت" نقلت للدورة 3
         ],
         s2Topics: [
             // PDF Page 4 Col 2
@@ -368,13 +362,13 @@ export const MODULE_CONTENTS: ModuleContent[] = [
             { topic: "نظام التشغيل/ الشبكات/ التخزين السحابي", duration: 2 } // = 6h
         ],
         s3Topics: [
+            { topic: "الابحار والبحث في شبكة الأنترنت", duration: 2 }, // منقولة من الدورة 1
             // PDF Page 4 Col 3
             { topic: "معالجة النصوص والجداول", duration: 2 },
             { topic: "العروض التقديمية", duration: 2 },
             { topic: "تغذية راجعة حول مايكروسوفت أكسل", duration: 1 },
             { topic: "العروض التقديمية Powerpoint", duration: 2 },
-            { topic: "العروض التقديمية Powerpoint", duration: 2 },
-            { topic: "تقويم نهاية التكوين", duration: 2 } // = 11h
+            { topic: "العروض التقديمية Powerpoint", duration: 2 }
         ]
     }
 ];

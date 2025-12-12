@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { SESSIONS, MODULES, MODULE_CONTENTS, CORRECTED_DISTRIBUTION } from '../constants';
 import { getWorkingDays, formatDate, isHoliday } from '../utils';
@@ -25,6 +24,16 @@ const ScheduleView: React.FC = () => {
       if (selectedSessionId === 1) return dist?.s1 || 0;
       if (selectedSessionId === 2) return dist?.s2 || 0;
       return dist?.s3 || 0;
+  };
+
+  // Helper to determine the label for specific days based on new logic
+  const getDailyVolumeLabel = (index: number) => {
+      if (selectedSessionId !== 3) return "5 ساعات"; // Default for S1 & S2
+      
+      // S3 Logic
+      if (index < 17) return "4 ساعات"; // Days 1 to 17
+      if (index === 17) return "2 ساعات"; // Day 18
+      return null; // Day 19+ (Empty)
   };
 
   return (
@@ -94,7 +103,10 @@ const ScheduleView: React.FC = () => {
                 <div className="text-left hidden md:block">
                     <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-400 px-4 py-2 rounded-full font-medium text-sm border border-amber-500/20 shadow-sm">
                         <Clock className="w-4 h-4" />
-                        التوقيت اليومي: 08:00 - 13:00 (5 ساعات)
+                        {selectedSessionId === 3 
+                            ? "التوقيت اليومي: 08:00 - 12:00 (4 ساعات)" 
+                            : "التوقيت اليومي: 08:00 - 13:00 (5 ساعات)"
+                        }
                     </div>
                 </div>
             )}
@@ -106,15 +118,19 @@ const ScheduleView: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {workingDays.map((day, idx) => {
                         const isDayHoliday = isHoliday(day);
+                        const volumeLabel = getDailyVolumeLabel(idx);
+
                         return (
                             <div key={idx} className={`relative p-5 rounded-xl border transition-all duration-300 ${
                                 isDayHoliday 
                                 ? 'bg-red-900/10 border-red-500/20 opacity-75' 
-                                : 'bg-slate-800/50 border-slate-700 hover:border-dzgreen-500/50 hover:bg-slate-800 hover:shadow-md hover:-translate-y-1'
+                                : !volumeLabel 
+                                    ? 'bg-slate-900/30 border-slate-800 opacity-60' // Empty day style
+                                    : 'bg-slate-800/50 border-slate-700 hover:border-dzgreen-500/50 hover:bg-slate-800 hover:shadow-md hover:-translate-y-1'
                             }`}>
                                 <div className="flex justify-between items-start mb-3">
                                     <span className="text-xs font-bold bg-slate-900 text-slate-400 px-2 py-1 rounded border border-slate-700">اليوم {idx + 1}</span>
-                                    {!isDayHoliday && <span className="text-xs font-bold text-dzgreen-400 bg-dzgreen-500/10 px-2 py-1 rounded">5 ساعات</span>}
+                                    {!isDayHoliday && volumeLabel && <span className="text-xs font-bold text-dzgreen-400 bg-dzgreen-500/10 px-2 py-1 rounded">{volumeLabel}</span>}
                                 </div>
                                 <h4 className="font-bold text-slate-100 text-lg mb-1">
                                     {formatDate(day.toISOString())}
@@ -124,11 +140,15 @@ const ScheduleView: React.FC = () => {
                                         <AlertCircle className="w-4 h-4" />
                                         عطلة مدفوعة
                                     </div>
-                                ) : (
+                                ) : volumeLabel ? (
                                     <div className="space-y-1.5 mt-4">
                                         <div className="h-1.5 bg-blue-500/40 rounded-full w-3/4"></div>
                                         <div className="h-1.5 bg-emerald-500/40 rounded-full w-1/2"></div>
                                         <div className="h-1.5 bg-purple-500/40 rounded-full w-2/3"></div>
+                                    </div>
+                                ) : (
+                                    <div className="mt-4 text-xs text-slate-500 italic text-center border-t border-slate-800 pt-2">
+                                        يوم إضافي (احتياطي / مغادرة)
                                     </div>
                                 )}
                             </div>
@@ -141,12 +161,7 @@ const ScheduleView: React.FC = () => {
                     <div>
                         <strong className="text-blue-400 block mb-1">ملاحظة:</strong>
                         تم استثناء أيام الجمعة وعطلة 5 جويلية (في الدورة الثالثة) من حساب أيام العمل الفعلية.
-                        المجموع الفعلي للأيام: <span className="text-white font-bold">{workingDays.length} يوم</span> × 5 ساعات = <span className="text-white font-bold">{workingDays.length * 5} ساعة</span>.
-                        {workingDays.length * 5 !== currentSession.hoursTotal && (
-                            <span className="mr-2 text-red-400 font-bold block mt-1">
-                                (تنبيه: الهدف المطلوب {currentSession.hoursTotal} ساعة. يرجى التحقق من العطل الإضافية)
-                            </span>
-                        )}
+                        المجموع الفعلي للأيام: <span className="text-white font-bold">{workingDays.length} يوم</span>.
                     </div>
                 </div>
             </>

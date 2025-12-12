@@ -71,7 +71,6 @@ const TimetableGenerator: React.FC = () => {
         const moduleRequirements: Record<number, number> = {};
         CORRECTED_DISTRIBUTION.forEach(d => {
            let hours = selectedSessionId === 1 ? d.s1 : selectedSessionId === 2 ? d.s2 : d.s3;
-           if (selectedSessionId === 3) hours = Math.max(0, hours - 2);
            moduleRequirements[d.moduleId] = hours;
         });
 
@@ -138,21 +137,24 @@ const TimetableGenerator: React.FC = () => {
         let totalCurriculumHours = 0;
         CORRECTED_DISTRIBUTION.forEach(d => {
            let hours = selectedSessionId === 1 ? d.s1 : selectedSessionId === 2 ? d.s2 : d.s3;
-           if (selectedSessionId === 3) hours = Math.max(0, hours - 2); 
            moduleRequirements[d.moduleId] = hours;
            totalCurriculumHours += hours;
         });
 
+        // Calculate available hours
         let sessionTotalHours = 0;
         if (selectedSessionId === 3) {
-            sessionTotalHours = 65; 
+            // S3: 17 days * 4h + 1 day * 2h = 70h
+            sessionTotalHours = 70;
         } else {
+            // S1 & S2: 5 hours per day
             const daysCount = Math.max(workingDays.length, currentSession.daysCount);
             sessionTotalHours = daysCount * 5;
         }
 
         const surplusHours = Math.max(0, sessionTotalHours - totalCurriculumHours);
-        if (surplusHours > 0) moduleRequirements[REVISION_MOD_ID] = surplusHours;
+        // FORCE DISABLE REVISION FOR S3 (User Request)
+        if (surplusHours > 0 && selectedSessionId !== 3) moduleRequirements[REVISION_MOD_ID] = surplusHours;
 
         // --- HELPER: GET TRAINER KEYS ---
         const getTrainerKeys = (modId: number, specId: string) => {
@@ -211,7 +213,7 @@ const TimetableGenerator: React.FC = () => {
             allGroups.forEach(g => assignmentsMap[g.globalId] = {});
 
             const availableModules: Module[] = [...MODULES];
-            if (surplusHours > 0) availableModules.push({ id: REVISION_MOD_ID, title: 'Rev', shortTitle: 'Rev', totalHours: 0 });
+            if (moduleRequirements[REVISION_MOD_ID] > 0) availableModules.push({ id: REVISION_MOD_ID, title: 'Rev', shortTitle: 'Rev', totalHours: 0 });
 
             availableModules.forEach(m => {
                 if (m.id === REVISION_MOD_ID) {
@@ -225,8 +227,6 @@ const TimetableGenerator: React.FC = () => {
                         const trainers = getTrainerKeys(m.id, scope.specId);
                         
                         // CALCULATE "FAIR SHARE CAP"
-                        // Example: 3 Groups / 3 Trainers = 1 group per trainer max.
-                        // Example: 3 Groups / 2 Trainers = 2 groups max.
                         const fairShareCap = Math.ceil(scope.groups.length / (trainers.length || 1));
 
                         // Track Load for Fairness
@@ -276,7 +276,11 @@ const TimetableGenerator: React.FC = () => {
             const currentAssignmentsList: TrainerAssignment[] = [];
 
             for (let dayIdx = 0; dayIdx < workingDays.length; dayIdx++) {
-                if (selectedSessionId === 3 && dayIdx > 15) continue; 
+                
+                // --- S3 DAY LIMIT LOGIC ---
+                // S3 spans exactly 18 days (Indices 0 to 17)
+                // If workingDays has more days (e.g. 19), ignore them
+                if (selectedSessionId === 3 && dayIdx > 17) continue;
 
                 allGroups.forEach(g => {
                     currentGroupSchedules[g.globalId].days.push({ 
@@ -287,7 +291,7 @@ const TimetableGenerator: React.FC = () => {
 
                 let daySuccess = false;
                 
-                for (let dayRetry = 0; dayRetry < 20; dayRetry++) {
+                for (let dayRetry = 0; dayRetry < 30; dayRetry++) {
                     const dayBackupHours = JSON.parse(JSON.stringify(remainingHours));
                     const dayBackupSlots: Record<string, any[]> = {};
                     allGroups.forEach(g => {
@@ -300,11 +304,16 @@ const TimetableGenerator: React.FC = () => {
                     const dailyModuleUsage: Record<string, Record<number, number>> = {};
                     allGroups.forEach(g => dailyModuleUsage[g.globalId] = {});
 
-                    for (let h = 0; h < 5; h++) {
-                        if (selectedSessionId === 3 && dayIdx > 0 && h >= 4) continue;
+                    // --- S3 HOUR LIMIT LOGIC ---
+                    let maxHoursPerDay = 5; // Default for S1/S2
+                    if (selectedSessionId === 3) {
+                        if (dayIdx < 17) maxHoursPerDay = 4; // Days 1-17 (Indices 0-16): 4 Hours
+                        else if (dayIdx === 17) maxHoursPerDay = 2; // Day 18 (Index 17): 2 Hours
+                        else maxHoursPerDay = 0;
+                    }
 
+                    for (let h = 0; h < maxHoursPerDay; h++) {
                         const busyIdentities = new Set<string>();
-                        
                         const shuffledGroups = [...allGroups].sort(() => Math.random() - 0.5);
 
                         for (const g of shuffledGroups) {
@@ -329,7 +338,10 @@ const TimetableGenerator: React.FC = () => {
                             });
 
                             if (candidates.length === 0) {
-                                dayPartialFail = true;
+                                // STRICT POLICY FOR S3: NO GAPS ALLOWED
+                                // If we can't find a module, the day is considered failed for this group.
+                                // We must retry the whole day shuffling.
+                                dayPartialFail = true; 
                                 break; 
                             }
 
@@ -438,7 +450,7 @@ const TimetableGenerator: React.FC = () => {
         localStorage.setItem('takwin_schedule', JSON.stringify(finalSchedule));
         localStorage.setItem('takwin_assignments', JSON.stringify(finalAssignments));
         
-        alert(`تم توليد وحفظ توزيع ${currentSession.name} بنجاح!\n(تم تطبيق العدالة الرياضية الصارمة مع مراعاة الاستقرار في حدود النصاب)`);
+        alert(`تم توليد وحفظ توزيع ${currentSession.name} بنجاح!\n(تم تطبيق العدالة الرياضية الصارمة: 17 يوم (4سا) + 1 يوم (2سا))`);
 
     } catch (err) {
         console.error("Gen Error", err);
@@ -554,10 +566,17 @@ const TimetableGenerator: React.FC = () => {
       const end = new Date(currentSession.endDate);
       start.setHours(0,0,0,0);
       end.setHours(23,59,59,999);
-      return schedule[0].days.filter(d => {
+      
+      const days = schedule[0].days.filter(d => {
           const date = new Date(d.date);
           return date >= start && date <= end;
       });
+
+      // Filter for S3 view specifically if S3 selected
+      if (selectedSessionId === 3) {
+          return days.slice(0, 18); // Only show first 18 working days
+      }
+      return days;
   };
 
   const visibleDays = getSessionDaysToRender();
@@ -619,10 +638,13 @@ const TimetableGenerator: React.FC = () => {
       sessionStart.setHours(0,0,0,0);
       sessionEnd.setHours(23,59,59,999);
 
-      const days = grp.days.filter(d => {
+      let days = grp.days.filter(d => {
           const date = new Date(d.date);
           return date >= sessionStart && date <= sessionEnd;
       });
+
+      // Apply S3 Limit for Print
+      if (selectedSessionId === 3) days = days.slice(0, 18);
 
       return getBalancedGroupPages(days); 
   };

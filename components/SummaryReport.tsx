@@ -453,7 +453,8 @@ const ReportContent: React.FC<{
     includeAnalytics: boolean
 }> = ({ activeReport, data, institution, specialties, trainerConfig, sessionInfo, getModuleHours, attStats, trainees, grades, attendance, includeAnalytics }) => {
     
-    const totalHours = activeReport === 'final' ? 190 : sessionInfo?.hoursTotal;
+    // Change hardcoded 190 to 170 for Final Report (Actual Teaching Hours)
+    const totalHours = activeReport === 'final' ? 170 : sessionInfo?.hoursTotal;
     const sessionName = activeReport === 'final' ? 'التقرير النهائي للتكوين' : `تقرير ${sessionInfo?.name}`;
     const dateRange = activeReport === 'final' ? 'الموسم التكويني: 2025 / 2026' : `الفترة: من ${sessionInfo?.startDate} إلى ${sessionInfo?.endDate}`;
 
@@ -572,7 +573,10 @@ const ReportContent: React.FC<{
 
             {/* 3. Program Execution */}
             <div className="mb-6 break-inside-avoid">
-                <h3 className="text-lg font-bold underline mb-2">3. تنفيذ البرنامج البيداغوجي:</h3>
+                <h3 className="text-lg font-bold underline mb-2">
+                    3. تنفيذ البرنامج البيداغوجي:
+                    {activeReport === 'final' && <span className="font-normal text-sm mr-2">(تضاف للحجم الكلي الساعي 20 ساعة خاصة بالتقويم النهائي)</span>}
+                </h3>
                 <table className="w-full border-collapse border border-black text-sm text-center">
                     <thead className="bg-gray-200">
                         <tr>
