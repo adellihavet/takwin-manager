@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2, CheckCircle2, XCircle, Activity, AlertTriangle, Trash2, ArrowRight, BarChart3, GraduationCap, Clock, RefreshCw, Presentation, Settings2, Map, Flag, TrendingUp, PieChart as PieIcon } from 'lucide-react';
+import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2, CheckCircle2, XCircle, Activity, AlertTriangle, Trash2, ArrowRight, BarChart3, GraduationCap, Clock, RefreshCw, Presentation, Settings2, Map, Flag, TrendingUp, PieChart as PieIcon, Printer } from 'lucide-react';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS, MODULES } from '../constants';
 import { Specialty, TrainerConfig, ProjectDatabase, InstitutionConfig, Trainee, AttendanceRecord } from '../types';
 import { downloadJSON, readJSONFile, formatDate } from '../utils';
@@ -240,6 +240,26 @@ const Dashboard: React.FC = () => {
               }
           }
       }));
+  };
+
+  // --- PRINT DOOR SIGNS ---
+  const handlePrintDoorSigns = () => {
+      const content = document.getElementById('door-signs-template');
+      let printSection = document.getElementById('print-section');
+      
+      if (!printSection) {
+          printSection = document.createElement('div');
+          printSection.id = 'print-section';
+          document.body.appendChild(printSection);
+      }
+      
+      if (content && printSection) {
+          printSection.innerHTML = '';
+          const clone = content.cloneNode(true) as HTMLElement;
+          clone.classList.remove('hidden');
+          printSection.appendChild(clone);
+          setTimeout(() => window.print(), 300);
+      }
   };
 
   // --- STATS CALCULATION ---
@@ -826,7 +846,7 @@ const Dashboard: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
-                {/* 3. Specialties */}
+                {/* 3. Specialties (Added Print Button Here) */}
                 <div className="space-y-6">
                     
                     {/* Specialty Distribution */}
@@ -834,6 +854,14 @@ const Dashboard: React.FC = () => {
                         <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
                             <h3 className="text-lg font-bold text-white">توزيع التخصصات والأفواج</h3>
                             <div className="flex gap-2">
+                                <button 
+                                    onClick={handlePrintDoorSigns}
+                                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
+                                    title="طباعة قصاصات الأبواب"
+                                >
+                                    <Printer className="w-3.5 h-3.5" />
+                                    لافتات الأبواب
+                                </button>
                                 {!isEditing ? (
                                     <button 
                                         onClick={handleEditClick}
@@ -1055,6 +1083,52 @@ const Dashboard: React.FC = () => {
             </div>
         </div>
       )}
+
+      {/* HIDDEN PRINT TEMPLATE: DOOR SIGNS */}
+      <div id="door-signs-template" className="hidden">
+          {specialties.map(spec => (
+              Array.from({ length: spec.groups }).map((_, idx) => {
+                  const groupNum = idx + 1;
+                  // Dynamic Border Color based on specialty color logic (extracting Tailwind class concept)
+                  // We map basic colors to border classes for print safety
+                  let borderColor = 'border-gray-800';
+                  if (spec.id === 'pe') borderColor = 'border-blue-600';
+                  if (spec.id === 'eng') borderColor = 'border-indigo-600';
+                  if (spec.id === 'ar') borderColor = 'border-emerald-600';
+                  if (spec.id === 'fr') borderColor = 'border-purple-600';
+
+                  return (
+                      <div key={`${spec.id}-${groupNum}`} className="page-break w-[297mm] h-[210mm] relative flex flex-col items-center justify-center p-8 bg-white text-black" style={{ direction: 'rtl' }}>
+                          
+                          {/* Header */}
+                          <div className="absolute top-8 w-full text-center">
+                              <h3 className="font-bold text-xl">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                              <h3 className="font-bold text-xl">وزارة التربية الوطنية</h3>
+                              <div className="flex justify-between mt-2 px-12 text-sm font-bold border-t-2 border-black pt-2 mx-12">
+                                  <span>مديرية التربية: {institution.wilaya}</span>
+                                  <span>مركز التكوين: {institution.center}</span>
+                              </div>
+                          </div>
+
+                          {/* Main Content Box */}
+                          <div className={`border-[12px] ${borderColor} rounded-[3rem] p-12 w-full max-w-4xl text-center shadow-sm flex flex-col items-center justify-center min-h-[120mm]`}>
+                              <div className="text-4xl font-bold text-gray-500 mb-2">فــــــــوج</div>
+                              <div className="text-[12rem] font-black leading-none mb-4">{String(groupNum).padStart(2, '0')}</div>
+                              <div className="text-5xl font-bold mt-4 px-8 py-2 bg-black text-white rounded-xl inline-block">
+                                  {spec.name}
+                              </div>
+                          </div>
+
+                          {/* Footer */}
+                          <div className="absolute bottom-8 w-full text-center text-xl font-bold text-gray-500">
+                              السنة التكوينية: 2025 / 2026
+                          </div>
+                      </div>
+                  );
+              })
+          ))}
+      </div>
+
     </div>
   );
 };

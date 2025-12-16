@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info } from 'lucide-react';
+import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info, FileText } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig, AttendanceRecord } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES } from '../constants';
 
@@ -239,14 +239,11 @@ const TraineeManager: React.FC = () => {
         if (window.confirm(`تحذير: حذف الكل؟`)) saveTrainees([]);
     };
 
-    // --- UPDATED PRINT HANDLER ---
+    // --- PRINT HANDLER (Attendance Sheet) ---
     const handlePrintGroup = () => {
-        // 1. Get the content template (now with unique ID)
         const content = document.getElementById('attendance-print-template');
-        // 2. Get the global print section (defined in index.html/App.css logic)
         let printSection = document.getElementById('print-section');
         
-        // Ensure print section exists
         if (!printSection) {
             printSection = document.createElement('div');
             printSection.id = 'print-section';
@@ -254,15 +251,31 @@ const TraineeManager: React.FC = () => {
         }
         
         if (content && printSection) {
-            // 3. Clear previous content to avoid "stale" prints
             printSection.innerHTML = '';
-            
-            // 4. Clone new content
             const clone = content.cloneNode(true) as HTMLElement;
             clone.classList.remove('hidden');
-            clone.style.display = 'block'; // Force visibility
-            
-            // 5. Append and Print
+            clone.style.display = 'block'; 
+            printSection.appendChild(clone);
+            window.print();
+        }
+    };
+
+    // --- NEW PRINT HANDLER (Posting List) ---
+    const handlePrintPostingList = () => {
+        const content = document.getElementById('posting-list-template');
+        let printSection = document.getElementById('print-section');
+        
+        if (!printSection) {
+            printSection = document.createElement('div');
+            printSection.id = 'print-section';
+            document.body.appendChild(printSection);
+        }
+        
+        if (content && printSection) {
+            printSection.innerHTML = '';
+            const clone = content.cloneNode(true) as HTMLElement;
+            clone.classList.remove('hidden');
+            clone.style.display = 'block'; 
             printSection.appendChild(clone);
             window.print();
         }
@@ -288,6 +301,15 @@ const TraineeManager: React.FC = () => {
         return { total, males, females };
     };
     const stats = getStats();
+
+    // Determine Border Color for Print
+    const getBorderColor = () => {
+        if (selectedGroupSpec === 'pe') return 'border-blue-600';
+        if (selectedGroupSpec === 'eng') return 'border-indigo-600';
+        if (selectedGroupSpec === 'ar') return 'border-emerald-600';
+        if (selectedGroupSpec === 'fr') return 'border-purple-600';
+        return 'border-gray-800';
+    };
 
     return (
         <div className="space-y-6 animate-fadeIn">
@@ -538,13 +560,19 @@ const TraineeManager: React.FC = () => {
                         </div>
 
                         <div className="mr-auto flex gap-2">
-                            {/* Add Button Removed based on request */}
+                            <button 
+                                onClick={handlePrintPostingList}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold shadow-lg transition-colors"
+                            >
+                                <FileText className="w-4 h-4" />
+                                طباعة قائمة المتكونين
+                            </button>
                             <button 
                                 onClick={handlePrintGroup}
                                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold shadow-lg transition-colors"
                             >
                                 <Printer className="w-4 h-4" />
-                                طباعة القائمة
+                                طباعة ورقة الحضور
                             </button>
                         </div>
                     </div>
@@ -603,7 +631,7 @@ const TraineeManager: React.FC = () => {
                         </table>
                     </div>
 
-                    {/* PRINT TEMPLATE - CHANGED ID TO AVOID CONFLICTS */}
+                    {/* ATTENDANCE SHEET TEMPLATE */}
                     <div id="attendance-print-template" className="hidden">
                         <div className="p-8 bg-white text-black h-full" style={{ direction: 'rtl' }}>
                             <div className="text-center mb-4 border-b-2 border-black pb-2">
@@ -652,6 +680,72 @@ const TraineeManager: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* NEW: POSTING LIST TEMPLATE (Door List) - Optimized for Single Page */}
+                    <div id="posting-list-template" className="hidden">
+                        <div className={`p-4 bg-white text-black h-full border-4 ${getBorderColor()} rounded-lg flex flex-col`} style={{ direction: 'rtl' }}>
+                            {/* Header */}
+                            <div className="text-center mb-2">
+                                <h3 className="font-bold text-base mb-1">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                                <div className="flex justify-between mt-2 border-t border-black pt-1 text-xs font-bold px-2">
+                                    <span>مديرية التربية: {institution.wilaya}</span>
+                                    <span>مركز التكوين: {institution.center}</span>
+                                </div>
+                            </div>
+
+                            {/* Title Box - More Compact */}
+                            <div className="text-center mb-4">
+                                <h1 className="text-2xl font-black bg-black text-white py-1 px-6 rounded-md inline-block shadow-md mb-2">
+                                    قائمة المتربصين (للعرض)
+                                </h1>
+                                <div className="flex items-center justify-center gap-3">
+                                    <h2 className="text-lg font-bold text-gray-800">
+                                        التخصص: {specialties.find(s => s.id === selectedGroupSpec)?.name}
+                                    </h2>
+                                    <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded border border-gray-300">
+                                        <span className="text-xl font-bold">فــــــــوج:</span>
+                                        <span className="text-3xl font-black">{selectedGroupNum}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* The List Table (Compact) */}
+                            <div className="flex-1">
+                                <table className="w-full border-2 border-black text-center text-sm table-fixed">
+                                    <thead className="bg-gray-100 h-8 border-b-2 border-black">
+                                        <tr>
+                                            <th className="border border-black w-10 py-1">رقم</th>
+                                            <th className="border border-black py-1">اللقب</th>
+                                            <th className="border border-black py-1">الاسم</th>
+                                            <th className="border border-black w-28 py-1">تاريخ الميلاد</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {groupTrainees.map((t, idx) => (
+                                            <tr key={t.id} className={`h-8 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                                <td className="border border-black font-bold">{idx + 1}</td>
+                                                <td className="border border-black font-bold text-right px-3">{t.surname}</td>
+                                                <td className="border border-black font-bold text-right px-3">{t.name}</td>
+                                                <td className="border border-black font-bold text-xs" dir="ltr">{t.dob}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Footer - Compact */}
+                            <div className="mt-4 pt-2 border-t-2 border-black flex justify-between items-end px-4">
+                                <div className="text-sm font-bold">
+                                    العدد الإجمالي: {groupTrainees.length} متربص
+                                </div>
+                                <div className="text-center">
+                                    <p className="font-bold text-sm mb-8">المدير البيداغوجي</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             )}
         </div>
