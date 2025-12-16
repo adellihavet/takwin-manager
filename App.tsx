@@ -25,7 +25,7 @@ import {
   HelpCircle, 
   Calculator, 
   BarChart2,
-  Printer 
+  Printer
 } from 'lucide-react';
 
 function App() {

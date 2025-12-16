@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SESSIONS, SPECIALTIES as DEFAULT_SPECIALTIES, MODULES, CORRECTED_DISTRIBUTION } from '../constants';
 import { getWorkingDays, formatDate } from '../utils';
 import { Specialty, GroupSchedule, TrainerConfig, TrainerAssignment, Module, InstitutionConfig } from '../types';
-import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText, BarChart3, ShieldCheck, XCircle, Table2, Edit3 } from 'lucide-react';
+import { RefreshCw, ArrowRightLeft, GraduationCap, Users, CheckCircle2, AlertCircle, Printer, FileText, BarChart3, ShieldCheck, XCircle, Table2, Edit3, Layers } from 'lucide-react';
 import TrainerAttribution from './TrainerAttribution';
 import TimetableEditor from './TimetableEditor';
 
@@ -27,6 +27,9 @@ const TimetableGenerator: React.FC = () => {
   const [printMode, setPrintMode] = useState<'none' | 'group' | 'trainer'>('none');
   const [printTarget, setPrintTarget] = useState<string>(''); // GroupId or TrainerKey
   
+  // NEW: Batch Print State
+  const [batchPrintType, setBatchPrintType] = useState<'groups' | 'trainers' | null>(null);
+
   // NEW STATE: Active Tab (Generator vs Editor vs Attribution)
   const [activeTab, setActiveTab] = useState<'generator' | 'editor' | 'attribution'>('generator');
 
@@ -531,8 +534,38 @@ const TimetableGenerator: React.FC = () => {
       return groups;
   };
 
-  // --- UPDATED DYNAMIC PRINT HANDLER (Fixes ghost document issue) ---
+  // --- BATCH PRINT HANDLER ---
+  const handleBatchPrint = (type: 'groups' | 'trainers') => {
+      setBatchPrintType(type);
+      setTimeout(() => {
+          const content = document.getElementById('timetable-print-template');
+          let printSection = document.getElementById('print-section');
+          
+          if (!printSection) {
+              printSection = document.createElement('div');
+              printSection.id = 'print-section';
+              document.body.appendChild(printSection);
+          }
+          
+          if (content && printSection) {
+              printSection.innerHTML = '';
+              const clone = content.cloneNode(true) as HTMLElement;
+              clone.classList.remove('hidden');
+              clone.style.display = 'block';
+              printSection.appendChild(clone);
+              
+              // Slight delay to ensure DOM is ready
+              setTimeout(() => {
+                  window.print();
+                  setBatchPrintType(null);
+              }, 500);
+          }
+      }, 200);
+  };
+
+  // --- UPDATED DYNAMIC PRINT HANDLER (Single Item) ---
   const handlePrint = () => {
+      setBatchPrintType(null); // Ensure not batch mode
       const content = document.getElementById('timetable-print-template');
       let printSection = document.getElementById('print-section');
       
@@ -599,10 +632,11 @@ const TimetableGenerator: React.FC = () => {
 
   // --- FILTERED TRAINER SCHEDULE ---
   // Returns only days where the trainer has at least one session.
-  const getPrintableTrainerSchedule = () => {
-      if (!printTarget) return [];
+  const getPrintableTrainerSchedule = (specificTarget?: string) => {
+      const target = specificTarget || printTarget;
+      if (!target) return [];
       
-      const parts = printTarget.split('-');
+      const parts = target.split('-');
       const mId = parseInt(parts[0]);
       const tKey = parts.slice(1).join('-');
 
@@ -743,7 +777,7 @@ const TimetableGenerator: React.FC = () => {
       <style>{`
         @media print {
             @page {
-                size: ${printMode === 'trainer' ? 'A4 portrait' : 'A4 landscape'};
+                size: ${printMode === 'trainer' || batchPrintType === 'trainers' ? 'A4 portrait' : 'A4 landscape'};
                 margin: 0;
             }
             body {
@@ -922,19 +956,21 @@ const TimetableGenerator: React.FC = () => {
                             <div className="space-y-4 bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                                 <h4 className="text-white font-bold text-sm border-b border-slate-700 pb-2 flex items-center gap-2">
                                     <Printer className="w-4 h-4 text-emerald-400" />
-                                    طباعة الجداول الفردية
+                                    طباعة الجداول
                                 </h4>
+                                
+                                {/* SINGLE PRINT */}
                                 <div className="flex gap-4 items-end">
                                     <div className="flex-1">
-                                        <label className="block text-slate-400 text-xs font-bold mb-1">نوع الجدول:</label>
+                                        <label className="block text-slate-400 text-xs font-bold mb-1">طباعة فردية:</label>
                                         <select 
                                             value={printMode} 
                                             onChange={(e) => { setPrintMode(e.target.value as any); setPrintTarget(''); }}
                                             className="w-full bg-slate-900 text-white border border-slate-700 rounded-lg p-2 text-sm"
                                         >
-                                            <option value="none">اختر...</option>
-                                            <option value="group">جدول خاص بفوج</option>
-                                            <option value="trainer">جدول خاص بأستاذ</option>
+                                            <option value="none">اختر النوع...</option>
+                                            <option value="group">جدول فوج محدد</option>
+                                            <option value="trainer">جدول أستاذ محدد</option>
                                         </select>
                                     </div>
                                     
@@ -960,12 +996,28 @@ const TimetableGenerator: React.FC = () => {
                                 {printTarget && (
                                     <button 
                                         onClick={handlePrint}
-                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-2 shadow-lg"
+                                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-2 shadow-lg mb-4"
                                     >
                                         <Printer className="w-4 h-4" />
-                                        طباعة الجدول
+                                        طباعة الجدول الفردي
                                     </button>
                                 )}
+
+                                {/* BATCH PRINT */}
+                                <div className="border-t border-slate-700 pt-3 flex gap-2">
+                                    <button 
+                                        onClick={() => handleBatchPrint('groups')}
+                                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 shadow transition-colors"
+                                    >
+                                        <Layers className="w-3 h-3" /> طباعة كل الأفواج
+                                    </button>
+                                    <button 
+                                        onClick={() => handleBatchPrint('trainers')}
+                                        className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1 shadow transition-colors"
+                                    >
+                                        <Layers className="w-3 h-3" /> طباعة كل الأساتذة
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -978,191 +1030,101 @@ const TimetableGenerator: React.FC = () => {
                     <div id="timetable-print-template" className="hidden">
                         <div style={{ direction: 'rtl' }}>
                             
-                            {/* GROUP PRINT (LANDSCAPE - BALANCED) */}
-                            {printMode === 'group' && printTarget && (
+                            {/* 1. SINGLE GROUP PRINT (LANDSCAPE) */}
+                            {printMode === 'group' && printTarget && !batchPrintType && (
                                 <>
                                     {getPrintableGroupSchedule(printTarget).map((pageDays, pageIndex, allPages) => (
                                         <div key={pageIndex} className="print-page-landscape flex flex-col h-full relative">
-                                            
-                                            {/* Page Header */}
-                                            <div className="text-center border-b-2 border-black pb-2 mb-2">
-                                                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
-                                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
-                                                <div className="flex justify-between mt-1 px-4 text-xs font-bold">
-                                                    <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
-                                                    <span>مركز التكوين {institution.center || '...................'}</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Page Title */}
-                                            <div className="text-center mb-2">
-                                                <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
-                                                    جدول التوقيت الأسبوعي - {getAllGroupsList().find(g => g.id === printTarget)?.name}
-                                                </h1>
-                                                <div className="flex justify-center gap-4 mt-1 font-bold text-xs">
-                                                    <span>{currentSession.name}</span>
-                                                    <span>({currentSession.startDate} إلى {currentSession.endDate})</span>
-                                                    {allPages.length > 1 && <span>(صفحة {pageIndex + 1} من {allPages.length})</span>}
-                                                </div>
-                                            </div>
-                                            
-                                            {/* Table Container - FIXED HEIGHT ROWS */}
-                                            <div className="flex-grow-0">
-                                                <table className="w-full border-2 border-black text-center text-xs table-fixed">
-                                                    <thead className="bg-gray-100 h-10">
-                                                        <tr>
-                                                            <th className="border border-black p-1 w-[12%]">اليوم / التاريخ</th>
-                                                            {[0,1,2,3,4].map(h => {
-                                                                if (selectedSessionId === 3 && h === 4) return null;
-                                                                return (
-                                                                    <th key={h} className="border border-black p-1">
-                                                                        {8+h}:00 - {9+h}:00
-                                                                    </th>
-                                                                );
-                                                            })}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {pageDays.map((day, dIdx) => (
-                                                            <tr key={dIdx} className="h-14">
-                                                                <td className="border border-black p-1 font-bold bg-gray-50">
-                                                                    <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
-                                                                    <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
-                                                                </td>
-                                                                {[0,1,2,3,4].map(h => {
-                                                                    if (selectedSessionId === 3 && h === 4) return null;
-
-                                                                    const slot = day.slots.find(s => parseInt(s.time) === (8+h)) 
-                                                                        || day.slots.find(s => parseInt(s.time) === (8+h-1) && s.duration === 2);
-                                                                    
-                                                                    if (!slot || !slot.moduleId) {
-                                                                        return <td key={h} className="border border-black bg-gray-100"></td>;
-                                                                    }
-
-                                                                    // Find trainer
-                                                                    const [specId, gNum] = printTarget.split('-');
-                                                                    const trainerName = getTrainerNameForSlot(schedule[0].days.findIndex(d => d.date === day.date), h, parseInt(gNum), specId, slot.moduleId);
-
-                                                                    return (
-                                                                        <td key={h} className="border border-black p-1 align-middle relative group">
-                                                                            <div className={`font-bold text-xs border-b border-dotted border-gray-400 pb-1 mb-1 ${slot.moduleId===999 ? 'text-amber-900' : 'text-black'}`}>
-                                                                                {getModuleName(slot.moduleId)}
-                                                                            </div>
-                                                                            <div className="text-[9px] italic text-gray-700">{trainerName}</div>
-                                                                        </td>
-                                                                    );
-                                                                })}
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-
-                                            {/* Signatures on LAST PAGE */}
-                                            {pageIndex === allPages.length - 1 ? (
-                                                <div className="mt-auto h-24 flex justify-end px-12 font-bold text-left text-sm">
-                                                    <div className="text-center">
-                                                        <p className="mb-10">المدير البيداغوجي</p>
-                                                        <p>........................</p>
-                                                    </div>
-                                                </div>
-                                            ) : null}
+                                            <PrintContentGroup 
+                                                pageDays={pageDays} 
+                                                pageIndex={pageIndex} 
+                                                totalPages={allPages.length} 
+                                                groupName={getAllGroupsList().find(g => g.id === printTarget)?.name || ''}
+                                                currentSession={currentSession}
+                                                institution={institution}
+                                                selectedSessionId={selectedSessionId}
+                                                workingDays={workingDays}
+                                                getModuleName={getModuleName}
+                                                getTrainerNameForSlot={getTrainerNameForSlot}
+                                                groupIdGlobal={printTarget}
+                                            />
                                         </div>
                                     ))}
                                 </>
                             )}
 
-                            {/* TRAINER PRINT (PORTRAIT - FILTERED SINGLE PAGE) */}
-                            {printMode === 'trainer' && printTarget && (
+                            {/* 2. BATCH GROUPS PRINT (LANDSCAPE) */}
+                            {batchPrintType === 'groups' && (
                                 <>
-                                    {getPrintableTrainerSchedule().map((pageDays, pageIndex) => (
+                                    {getAllGroupsList().map(group => {
+                                        const pages = getPrintableGroupSchedule(group.id);
+                                        return pages.map((pageDays, pageIndex) => (
+                                            <div key={`${group.id}-${pageIndex}`} className="print-page-landscape flex flex-col h-full relative">
+                                                <PrintContentGroup 
+                                                    pageDays={pageDays} 
+                                                    pageIndex={pageIndex} 
+                                                    totalPages={pages.length} 
+                                                    groupName={group.name}
+                                                    currentSession={currentSession}
+                                                    institution={institution}
+                                                    selectedSessionId={selectedSessionId}
+                                                    workingDays={workingDays}
+                                                    getModuleName={getModuleName}
+                                                    getTrainerNameForSlot={getTrainerNameForSlot}
+                                                    groupIdGlobal={group.id}
+                                                />
+                                            </div>
+                                        ));
+                                    })}
+                                </>
+                            )}
+
+                            {/* 3. SINGLE TRAINER PRINT (PORTRAIT) */}
+                            {printMode === 'trainer' && printTarget && !batchPrintType && (
+                                <>
+                                    {getPrintableTrainerSchedule(printTarget).map((pageDays, pageIndex) => (
                                         <div key={pageIndex} className="print-page-portrait flex flex-col justify-between">
-                                            <div className="text-center border-b-2 border-black pb-2 mb-2">
-                                                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
-                                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
-                                                <div className="flex justify-between mt-1 px-4 text-xs font-bold">
-                                                    <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
-                                                    <span>مركز التكوين {institution.center || '...................'}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="text-center mb-4">
-                                                <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
-                                                    جدول التوقيت الشخصي
-                                                </h1>
-                                                <div className="mt-2 text-sm font-bold flex flex-col gap-1">
-                                                    <span>الأستاذ: {getAllTrainersList().find(t => `${t.moduleId}-${t.key}` === printTarget)?.name}</span>
-                                                    <span>مقياس: {getModuleName(parseInt(printTarget.split('-')[0]))}</span>
-                                                </div>
-                                                <div className="flex justify-center gap-4 mt-1 font-bold text-xs text-gray-600">
-                                                    <span>{currentSession.name}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex-grow flex items-start">
-                                                <table className="w-full border-2 border-black text-center text-xs table-fixed h-full">
-                                                    <thead className="bg-gray-100 h-10">
-                                                        <tr>
-                                                            <th className="border border-black p-1 w-[15%]">اليوم</th>
-                                                            {[0,1,2,3,4].map(h => {
-                                                                if (selectedSessionId === 3 && h === 4) return null;
-                                                                return (
-                                                                    <th key={h} className="border border-black p-1">
-                                                                        {8+h}:00 - {9+h}:00
-                                                                    </th>
-                                                                );
-                                                            })}
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {pageDays.map((day, dIdx) => (
-                                                            <tr key={dIdx} className="h-14">
-                                                                <td className="border border-black p-1 font-bold bg-gray-50 h-auto">
-                                                                    <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
-                                                                    <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
-                                                                </td>
-                                                                {[0,1,2,3,4].map(h => {
-                                                                    if (selectedSessionId === 3 && h === 4) return null;
-
-                                                                    const parts = printTarget.split('-');
-                                                                    const mId = parseInt(parts[0]);
-                                                                    const tKey = parts.slice(1).join('-'); 
-
-                                                                    const assign = trainerAssignments.find(a => 
-                                                                        a.sessionId === selectedSessionId &&
-                                                                        a.moduleId === mId &&
-                                                                        a.trainerKey === tKey &&
-                                                                        a.dayIndex === (day as any).originalIndex && 
-                                                                        a.hourIndex === h
-                                                                    );
-
-                                                                    if (!assign) return <td key={h} className="border border-black bg-gray-100"></td>;
-
-                                                                    const [sId, gN] = assign.groupId.split('-');
-                                                                    const sName = specialties.find(s=>s.id === sId)?.name;
-
-                                                                    return (
-                                                                        <td key={h} className="border border-black p-1 font-bold text-xs align-middle bg-white">
-                                                                            <div className="font-bold">{sName}</div>
-                                                                            <div className="bg-black text-white inline-block px-2 rounded mt-1">فوج {gN}</div>
-                                                                        </td>
-                                                                    );
-                                                                })}
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-
-                                            {/* Footer for Trainers - Portrait layout signature */}
-                                            <div className="mt-4 h-24 flex justify-end px-8 font-bold text-left text-sm">
-                                                <div className="text-center">
-                                                    <p className="mb-10">المدير البيداغوجي</p>
-                                                    <p>........................</p>
-                                                </div>
-                                            </div>
+                                            <PrintContentTrainer 
+                                                pageDays={pageDays}
+                                                trainerTarget={printTarget}
+                                                institution={institution}
+                                                currentSession={currentSession}
+                                                selectedSessionId={selectedSessionId}
+                                                trainerAssignments={trainerAssignments}
+                                                specialties={specialties}
+                                                getModuleName={getModuleName}
+                                                allTrainersList={getAllTrainersList()}
+                                            />
                                         </div>
                                     ))}
+                                </>
+                            )}
+
+                            {/* 4. BATCH TRAINERS PRINT (PORTRAIT) */}
+                            {batchPrintType === 'trainers' && (
+                                <>
+                                    {getAllTrainersList().map(trainer => {
+                                        const target = `${trainer.moduleId}-${trainer.key}`;
+                                        const pages = getPrintableTrainerSchedule(target);
+                                        // Skip if no schedule (empty pages)
+                                        if (pages.length === 0 || pages[0].length === 0) return null;
+
+                                        return pages.map((pageDays, pageIndex) => (
+                                            <div key={`${target}-${pageIndex}`} className="print-page-portrait flex flex-col justify-between">
+                                                <PrintContentTrainer 
+                                                    pageDays={pageDays}
+                                                    trainerTarget={target}
+                                                    institution={institution}
+                                                    currentSession={currentSession}
+                                                    selectedSessionId={selectedSessionId}
+                                                    trainerAssignments={trainerAssignments}
+                                                    specialties={specialties}
+                                                    getModuleName={getModuleName}
+                                                    allTrainersList={getAllTrainersList()}
+                                                />
+                                            </div>
+                                        ));
+                                    })}
                                 </>
                             )}
                         </div>
@@ -1378,6 +1340,212 @@ const TimetableGenerator: React.FC = () => {
       )}
     </div>
   );
+};
+
+// --- HELPER COMPONENT: PRINT CONTENT GROUP ---
+const PrintContentGroup: React.FC<{
+    pageDays: any[];
+    pageIndex: number;
+    totalPages: number;
+    groupName: string;
+    currentSession: any;
+    institution: any;
+    selectedSessionId: number;
+    workingDays: Date[];
+    getModuleName: (id: number) => string;
+    getTrainerNameForSlot: (d: number, h: number, g: number, s: string, m: number) => string;
+    groupIdGlobal: string;
+}> = ({ pageDays, pageIndex, totalPages, groupName, currentSession, institution, selectedSessionId, workingDays, getModuleName, getTrainerNameForSlot, groupIdGlobal }) => {
+    return (
+        <>
+            {/* Page Header */}
+            <div className="text-center border-b-2 border-black pb-2 mb-2">
+                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                <div className="flex justify-between mt-1 px-4 text-xs font-bold">
+                    <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
+                    <span>مركز التكوين {institution.center || '...................'}</span>
+                </div>
+            </div>
+
+            {/* Page Title */}
+            <div className="text-center mb-2">
+                <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
+                    جدول التوقيت الأسبوعي - {groupName}
+                </h1>
+                <div className="flex justify-center gap-4 mt-1 font-bold text-xs">
+                    <span>{currentSession.name}</span>
+                    <span>({currentSession.startDate} إلى {currentSession.endDate})</span>
+                    {totalPages > 1 && <span>(صفحة {pageIndex + 1} من {totalPages})</span>}
+                </div>
+            </div>
+            
+            {/* Table Container - FIXED HEIGHT ROWS */}
+            <div className="flex-grow-0">
+                <table className="w-full border-2 border-black text-center text-xs table-fixed">
+                    <thead className="bg-gray-100 h-10">
+                        <tr>
+                            <th className="border border-black p-1 w-[12%]">اليوم / التاريخ</th>
+                            {[0,1,2,3,4].map(h => {
+                                if (selectedSessionId === 3 && h === 4) return null;
+                                return (
+                                    <th key={h} className="border border-black p-1">
+                                        {8+h}:00 - {9+h}:00
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {pageDays.map((day, dIdx) => (
+                            <tr key={dIdx} className="h-14">
+                                <td className="border border-black p-1 font-bold bg-gray-50">
+                                    <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
+                                    <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
+                                </td>
+                                {[0,1,2,3,4].map(h => {
+                                    if (selectedSessionId === 3 && h === 4) return null;
+
+                                    const slot = day.slots.find((s: any) => parseInt(s.time) === (8+h)) 
+                                        || day.slots.find((s: any) => parseInt(s.time) === (8+h-1) && s.duration === 2);
+                                    
+                                    if (!slot || !slot.moduleId) {
+                                        return <td key={h} className="border border-black bg-gray-100"></td>;
+                                    }
+
+                                    const [specId, gNum] = groupIdGlobal.split('-');
+                                    
+                                    const dayGlobalIndex = workingDays.findIndex(wd => wd.toISOString() === day.date);
+                                    const trainerName = getTrainerNameForSlot(dayGlobalIndex, h, parseInt(gNum), specId, slot.moduleId);
+
+                                    return (
+                                        <td key={h} className="border border-black p-1 align-middle relative group">
+                                            <div className={`font-bold text-xs border-b border-dotted border-gray-400 pb-1 mb-1 ${slot.moduleId===999 ? 'text-amber-900' : 'text-black'}`}>
+                                                {getModuleName(slot.moduleId)}
+                                            </div>
+                                            <div className="text-[9px] italic text-gray-700">{trainerName}</div>
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Signatures on LAST PAGE */}
+            {pageIndex === totalPages - 1 ? (
+                <div className="mt-auto h-24 flex justify-end px-12 font-bold text-left text-sm">
+                    <div className="text-center">
+                        <p className="mb-10">المدير البيداغوجي</p>
+                        <p>........................</p>
+                    </div>
+                </div>
+            ) : null}
+        </>
+    );
+};
+
+// --- HELPER COMPONENT: PRINT CONTENT TRAINER ---
+const PrintContentTrainer: React.FC<{
+    pageDays: any[];
+    trainerTarget: string;
+    institution: any;
+    currentSession: any;
+    selectedSessionId: number;
+    trainerAssignments: any[];
+    specialties: any[];
+    getModuleName: (id: number) => string;
+    allTrainersList: any[];
+}> = ({ pageDays, trainerTarget, institution, currentSession, selectedSessionId, trainerAssignments, specialties, getModuleName, allTrainersList }) => {
+    return (
+        <>
+            <div className="text-center border-b-2 border-black pb-2 mb-2">
+                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                <div className="flex justify-between mt-1 px-4 text-xs font-bold">
+                    <span>مديرية التربية لولاية {institution.wilaya || '...................'}</span>
+                    <span>مركز التكوين {institution.center || '...................'}</span>
+                </div>
+            </div>
+
+            <div className="text-center mb-4">
+                <h1 className="text-lg font-black bg-gray-200 inline-block px-6 py-1 border-2 border-black rounded">
+                    جدول التوقيت الشخصي
+                </h1>
+                <div className="mt-2 text-sm font-bold flex flex-col gap-1">
+                    <span>الأستاذ: {allTrainersList.find(t => `${t.moduleId}-${t.key}` === trainerTarget)?.name}</span>
+                    <span>مقياس: {getModuleName(parseInt(trainerTarget.split('-')[0]))}</span>
+                </div>
+                <div className="flex justify-center gap-4 mt-1 font-bold text-xs text-gray-600">
+                    <span>{currentSession.name}</span>
+                </div>
+            </div>
+
+            <div className="flex-grow flex items-start">
+                <table className="w-full border-2 border-black text-center text-xs table-fixed h-full">
+                    <thead className="bg-gray-100 h-10">
+                        <tr>
+                            <th className="border border-black p-1 w-[15%]">اليوم</th>
+                            {[0,1,2,3,4].map(h => {
+                                if (selectedSessionId === 3 && h === 4) return null;
+                                return (
+                                    <th key={h} className="border border-black p-1">
+                                        {8+h}:00 - {9+h}:00
+                                    </th>
+                                );
+                            })}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {pageDays.map((day, dIdx) => (
+                            <tr key={dIdx} className="h-14">
+                                <td className="border border-black p-1 font-bold bg-gray-50 h-auto">
+                                    <div className="text-sm">{formatDate(day.date).split(' ')[0]}</div>
+                                    <div className="text-[10px] font-normal">{formatDate(day.date).split(' ').slice(1).join(' ')}</div>
+                                </td>
+                                {[0,1,2,3,4].map(h => {
+                                    if (selectedSessionId === 3 && h === 4) return null;
+
+                                    const parts = trainerTarget.split('-');
+                                    const mId = parseInt(parts[0]);
+                                    const tKey = parts.slice(1).join('-'); 
+
+                                    const assign = trainerAssignments.find((a: any) => 
+                                        a.sessionId === selectedSessionId &&
+                                        a.moduleId === mId &&
+                                        a.trainerKey === tKey &&
+                                        a.dayIndex === (day as any).originalIndex && 
+                                        a.hourIndex === h
+                                    );
+
+                                    if (!assign) return <td key={h} className="border border-black bg-gray-100"></td>;
+
+                                    const [sId, gN] = assign.groupId.split('-');
+                                    const sName = specialties.find((s: any)=>s.id === sId)?.name;
+
+                                    return (
+                                        <td key={h} className="border border-black p-1 font-bold text-xs align-middle bg-white">
+                                            <div className="font-bold">{sName}</div>
+                                            <div className="bg-black text-white inline-block px-2 rounded mt-1">فوج {gN}</div>
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Footer for Trainers - Portrait layout signature */}
+            <div className="mt-4 h-24 flex justify-end px-8 font-bold text-left text-sm">
+                <div className="text-center">
+                    <p className="mb-10">المدير البيداغوجي</p>
+                    <p>........................</p>
+                </div>
+            </div>
+        </>
+    );
 };
 
 export default TimetableGenerator;

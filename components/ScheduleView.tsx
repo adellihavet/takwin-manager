@@ -1,12 +1,37 @@
 
-import React, { useState } from 'react';
-import { SESSIONS, MODULES, MODULE_CONTENTS, CORRECTED_DISTRIBUTION } from '../constants';
+import React, { useState, useEffect } from 'react';
+import { SESSIONS, MODULES, MODULE_CONTENTS, CORRECTED_DISTRIBUTION, SPECIALTIES } from '../constants';
 import { getWorkingDays, formatDate, isHoliday } from '../utils';
-import { Clock, CalendarCheck, AlertCircle, Info, BookOpen, List, Calendar as CalendarIcon, CheckSquare } from 'lucide-react';
+import { Clock, CalendarCheck, AlertCircle, Info, BookOpen, List, Calendar as CalendarIcon, CheckSquare, Printer, X, FileText, Layers } from 'lucide-react';
+import { GroupSchedule, TrainerAssignment, TrainerConfig, InstitutionConfig } from '../types';
 
 const ScheduleView: React.FC = () => {
   const [selectedSessionId, setSelectedSessionId] = useState(1);
   const [viewMode, setViewMode] = useState<'calendar' | 'content'>('calendar');
+
+  // --- PRINT LOGIC STATE ---
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [selectedPrintModuleId, setSelectedPrintModuleId] = useState<number>(0);
+  const [selectedPrintTrainerKey, setSelectedPrintTrainerKey] = useState<string>('');
+  
+  // --- BATCH PRINT STATE ---
+  const [isBatchPrinting, setIsBatchPrinting] = useState(false);
+  
+  // --- DATA LOADING FOR PRINTING ---
+  const [assignments, setAssignments] = useState<TrainerAssignment[]>([]);
+  const [trainerConfig, setTrainerConfig] = useState<TrainerConfig>({});
+  const [institution, setInstitution] = useState<InstitutionConfig>({ wilaya: '', institute: '', center: '', director: '' });
+
+  useEffect(() => {
+      const a = localStorage.getItem('takwin_assignments');
+      if (a) try { setAssignments(JSON.parse(a)); } catch(e){}
+
+      const t = localStorage.getItem('takwin_trainers_db');
+      if (t) try { setTrainerConfig(JSON.parse(t)); } catch(e){}
+
+      const i = localStorage.getItem('takwin_institution_db');
+      if (i) try { setInstitution(JSON.parse(i)); } catch(e){}
+  }, []);
 
   const currentSession = SESSIONS.find(s => s.id === selectedSessionId) || SESSIONS[0];
   const workingDays = getWorkingDays(currentSession.startDate, currentSession.endDate);
@@ -36,10 +61,146 @@ const ScheduleView: React.FC = () => {
       return null; // Day 19+ (Empty)
   };
 
+  // --- PRINT PREPARATION HELPERS ---
+  const getAvailableTrainersForPrint = () => {
+      if (!selectedPrintModuleId) return [];
+      const relevantAssignments = assignments.filter(a => 
+          a.sessionId === selectedSessionId && a.moduleId === selectedPrintModuleId
+      );
+      const uniqueKeys = Array.from(new Set(relevantAssignments.map(a => a.trainerKey)));
+      
+      return uniqueKeys.map(key => {
+          let name = key;
+          if (selectedPrintModuleId === 1) {
+              name = trainerConfig[1]?.names?.[key] || key;
+          } else {
+              name = trainerConfig[selectedPrintModuleId]?.names?.[key] || `مكون ${key}`;
+          }
+          return { key, name };
+      });
+  };
+
+  // Helper to get data for a specific trainer (Used for both single and batch print)
+  const calculatePrintData = (moduleId: number, trainerKey: string) => {
+      const myAssignments = assignments.filter(a => 
+          a.sessionId === selectedSessionId && 
+          a.moduleId === moduleId && 
+          a.trainerKey === trainerKey
+      );
+      // Unique group IDs
+      const uniqueGroupIds = Array.from(new Set(myAssignments.map(a => a.groupId)));
+      
+      const groupsData = uniqueGroupIds.map(gid => {
+          const [sId, gNum] = gid.split('-');
+          const sName = SPECIALTIES.find(s => s.id === sId)?.name || '';
+          return { id: gid, name: sName, num: gNum };
+      }).sort((a,b) => parseInt(a.num) - parseInt(b.num));
+
+      // Get Trainer Name
+      let trainerName = trainerKey;
+      if (moduleId === 1) {
+          trainerName = trainerConfig[1]?.names?.[trainerKey] || trainerKey;
+      } else {
+          trainerName = trainerConfig[moduleId]?.names?.[trainerKey] || `مكون ${trainerKey}`;
+      }
+
+      return {
+          groupsData,
+          trainerName,
+          moduleName: MODULES.find(m => m.id === moduleId)?.title || '',
+          syllabus: getSessionTopics(moduleId),
+          totalVolume: getSessionTopics(moduleId).reduce((acc, curr) => acc + curr.duration, 0)
+      };
+  };
+
+  const handleOpenPrintModal = (moduleId: number) => {
+      setSelectedPrintModuleId(moduleId);
+      setSelectedPrintTrainerKey(''); 
+      setIsBatchPrinting(false);
+      setPrintModalOpen(true);
+  };
+
+  const handleBatchPrintAll = () => {
+      setIsBatchPrinting(true);
+      setTimeout(() => {
+          const content = document.getElementById('batch-print-template');
+          let printSection = document.getElementById('print-section');
+          
+          if (!printSection) {
+              printSection = document.createElement('div');
+              printSection.id = 'print-section';
+              document.body.appendChild(printSection);
+          }
+          
+          if (content && printSection) {
+              printSection.innerHTML = '';
+              const clone = content.cloneNode(true) as HTMLElement;
+              clone.classList.remove('hidden');
+              printSection.appendChild(clone);
+              window.print();
+              setIsBatchPrinting(false);
+          }
+      }, 500); // Wait for render
+  };
+
+  const executePrint = () => {
+      const content = document.getElementById('pedagogical-print-template');
+      let printSection = document.getElementById('print-section');
+      
+      if (!printSection) {
+          printSection = document.createElement('div');
+          printSection.id = 'print-section';
+          document.body.appendChild(printSection);
+      }
+      
+      if (content && printSection) {
+          printSection.innerHTML = '';
+          const clone = content.cloneNode(true) as HTMLElement;
+          clone.classList.remove('hidden');
+          printSection.appendChild(clone);
+          window.print();
+          setPrintModalOpen(false); 
+      }
+  };
+
+  // --- PREPARE BATCH DATA ---
+  const getAllBatchData = () => {
+      if (!isBatchPrinting) return [];
+      const batchItems: any[] = [];
+      
+      // Iterate all modules
+      MODULES.forEach(module => {
+          // Find all trainers for this module in this session
+          const relevantAssignments = assignments.filter(a => 
+              a.sessionId === selectedSessionId && a.moduleId === module.id
+          );
+          const uniqueKeys = Array.from(new Set(relevantAssignments.map(a => a.trainerKey)));
+          
+          uniqueKeys.forEach(tKey => {
+              const data = calculatePrintData(module.id, tKey);
+              batchItems.push({
+                  key: `${module.id}-${tKey}`,
+                  ...data
+              });
+          });
+      });
+      return batchItems;
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
+        {/* FORCE PORTRAIT FOR THIS DOC */}
+        <style>{`
+            @media print {
+                @page { size: portrait; margin: 0; }
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                .print-table th, .print-table td { border: 1px solid black; padding: 4px; }
+                .page-break { page-break-after: always; break-after: page; display: block; height: 0; }
+            }
+        `}</style>
+
       {/* Header Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6 print:hidden">
           {/* Session Tabs */}
           <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
             {SESSIONS.map(s => (
@@ -84,9 +245,9 @@ const ScheduleView: React.FC = () => {
           </div>
       </div>
 
-      <div className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 p-6 min-h-[600px]">
+      <div className="bg-slate-900/80 backdrop-blur rounded-2xl shadow-lg border border-slate-800/60 p-6 min-h-[600px] print:hidden">
         {/* Header Info */}
-        <div className="flex items-center justify-between mb-8 pb-4 border-b border-slate-800">
+        <div className="flex flex-col md:flex-row items-center justify-between mb-8 pb-4 border-b border-slate-800 gap-4">
             <div>
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                     {viewMode === 'calendar' ? <CalendarCheck className="text-dzgreen-500" /> : <List className="text-purple-500" />}
@@ -99,6 +260,17 @@ const ScheduleView: React.FC = () => {
                     }
                 </p>
             </div>
+            
+            {viewMode === 'content' && (
+                <button 
+                    onClick={handleBatchPrintAll}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-transform hover:scale-105 border border-emerald-400/20"
+                >
+                    <Layers className="w-5 h-5" />
+                    طباعة جميع التكليفات ({SESSIONS.find(s=>s.id===selectedSessionId)?.name})
+                </button>
+            )}
+
             {viewMode === 'calendar' && (
                 <div className="text-left hidden md:block">
                     <div className="inline-flex items-center gap-2 bg-amber-500/10 text-amber-400 px-4 py-2 rounded-full font-medium text-sm border border-amber-500/20 shadow-sm">
@@ -181,10 +353,20 @@ const ScheduleView: React.FC = () => {
                     return (
                         <div key={module.id} className="bg-slate-800/40 border border-slate-700/50 rounded-xl overflow-hidden hover:border-purple-500/30 transition-colors flex flex-col">
                             <div className="p-4 bg-slate-900/50 border-b border-slate-800 flex justify-between items-center">
-                                <h3 className="font-bold text-white text-lg">{module.title}</h3>
-                                <div className={`text-xs font-bold px-3 py-1.5 rounded border ${isHoursMatching ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
-                                    الحجم المخصص: {targetHours} سا
+                                <div>
+                                    <h3 className="font-bold text-white text-lg">{module.title}</h3>
+                                    <div className={`text-xs font-bold px-3 py-1.5 rounded border mt-1 inline-block ${isHoursMatching ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                                        الحجم المخصص: {targetHours} سا
+                                    </div>
                                 </div>
+                                {/* PRINT BUTTON ADDED HERE */}
+                                <button 
+                                    onClick={() => handleOpenPrintModal(module.id)}
+                                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-700"
+                                    title="طباعة وثيقة التكليف والبرنامج"
+                                >
+                                    <Printer className="w-5 h-5" />
+                                </button>
                             </div>
                             
                             <div className="flex-1 p-0">
@@ -236,8 +418,222 @@ const ScheduleView: React.FC = () => {
         )}
 
       </div>
+
+      {/* PRINT SELECTION MODAL */}
+      {printModalOpen && (
+          <div className="fixed inset-0 z-[60000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+              <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
+                  <button onClick={() => setPrintModalOpen(false)} className="absolute top-4 left-4 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                      <Printer className="text-blue-400" />
+                      طباعة وثيقة التكليف البيداغوجي
+                  </h3>
+                  
+                  <div className="space-y-4">
+                      <div className="bg-blue-900/20 p-3 rounded-lg border border-blue-500/20">
+                          <p className="text-sm text-blue-200">
+                              المقياس: <span className="font-bold">{MODULES.find(m => m.id === selectedPrintModuleId)?.title}</span>
+                          </p>
+                      </div>
+
+                      <div>
+                          <label className="block text-slate-400 text-xs font-bold mb-2">اختر الأستاذ (لإظهار اسمه في التكليف):</label>
+                          <select 
+                              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white outline-none focus:border-blue-500"
+                              value={selectedPrintTrainerKey}
+                              onChange={e => setSelectedPrintTrainerKey(e.target.value)}
+                          >
+                              <option value="">-- اختر الأستاذ --</option>
+                              {getAvailableTrainersForPrint().map(t => (
+                                  <option key={t.key} value={t.key}>{t.name}</option>
+                              ))}
+                          </select>
+                          {getAvailableTrainersForPrint().length === 0 && (
+                              <p className="text-xs text-red-400 mt-2">لا يوجد أساتذة معينين لهذا المقياس في هذه الدورة.</p>
+                          )}
+                      </div>
+
+                      <button 
+                          onClick={executePrint}
+                          disabled={!selectedPrintTrainerKey}
+                          className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold py-3 rounded-xl transition-colors shadow-lg mt-4"
+                      >
+                          طباعة الوثيقة
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* HIDDEN PRINT TEMPLATE (SINGLE) */}
+      <div id="pedagogical-print-template" className="hidden">
+            {selectedPrintModuleId && selectedPrintTrainerKey && (
+                <div className="w-[210mm] min-h-[297mm] bg-white text-black p-[10mm] relative flex flex-col">
+                    <PrintContent 
+                        institution={institution}
+                        sessionName={currentSession.name}
+                        {...calculatePrintData(selectedPrintModuleId, selectedPrintTrainerKey)}
+                        groupsData={calculatePrintData(selectedPrintModuleId, selectedPrintTrainerKey).groupsData} // Re-calculated
+                    />
+                </div>
+            )}
+      </div>
+
+      {/* HIDDEN BATCH PRINT TEMPLATE */}
+      <div id="batch-print-template" className="hidden">
+          {isBatchPrinting && getAllBatchData().map((item, index) => (
+              <div key={index} className="w-[210mm] min-h-[297mm] bg-white text-black p-[10mm] relative flex flex-col page-break">
+                  <PrintContent 
+                      institution={institution}
+                      sessionName={currentSession.name}
+                      moduleName={item.moduleName}
+                      trainerName={item.trainerName}
+                      syllabus={item.syllabus}
+                      groupsData={item.groupsData}
+                      totalVolume={item.totalVolume}
+                  />
+              </div>
+          ))}
+      </div>
+
     </div>
   );
+};
+
+// --- Helper Component for Print Layout (ELEGANT PEDAGOGICAL CONTRACT) ---
+const PrintContent: React.FC<{
+    institution: InstitutionConfig;
+    sessionName: string;
+    moduleName: string;
+    trainerName: string;
+    syllabus: any[];
+    groupsData: { id: string, name: string, num: string }[];
+    totalVolume: number;
+}> = ({ institution, sessionName, moduleName, trainerName, syllabus, groupsData, totalVolume }) => {
+    
+    // Format groups for header text (e.g., "الرياضيات (1، 2)، العربية (3)")
+    const formattedGroupsText = groupsData.map(g => `${g.name} (ف${g.num})`).join('، ');
+
+    return (
+        <div className="h-full flex flex-col" style={{ direction: 'rtl' }}>
+            
+            {/* UPDATED HEADER: Centered Republic/Ministry, Split Director/Center */}
+            <div className="text-center mb-2 font-bold font-serif leading-tight">
+                <h3>الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                <h3>وزارة التربية الوطنية</h3>
+            </div>
+            
+            <div className="flex justify-between items-start border-b-2 border-black pb-2 mb-4 text-sm font-bold">
+                <div className="text-right">
+                    مديرية التربية لولاية {institution.wilaya}
+                </div>
+                <div className="text-left">
+                    مركز التكوين: {institution.center}
+                </div>
+            </div>
+
+            {/* TITLE */}
+            <div className="text-center mb-4 relative">
+                <h1 className="text-xl font-black bg-gray-100 inline-block px-6 py-1 border-2 border-black rounded-lg uppercase tracking-wide">
+                    وثيقة التكليف والمتابعة البيداغوجية
+                </h1>
+            </div>
+
+            {/* COMPACT INFO CARD (Includes Year now) */}
+            <div className="border border-black p-2 mb-4 bg-gray-50 flex flex-wrap gap-y-2 text-xs font-bold shadow-sm">
+                <div className="w-1/2 border-l border-gray-300 pl-2">
+                    <span className="text-gray-600 block">الأستاذ(ة) المكون(ة):</span>
+                    <span className="text-base text-black">{trainerName}</span>
+                </div>
+                <div className="w-1/2 pr-2">
+                    <span className="text-gray-600 block">المقياس:</span>
+                    <span className="text-sm">{moduleName}</span>
+                </div>
+                
+                <div className="w-1/2 border-t border-gray-300 pt-1 mt-1 border-l pl-2">
+                    <span className="text-gray-600 inline-block ml-2">الدورة / السنة:</span>
+                    <span>{sessionName} (2026/2025)</span>
+                </div>
+                <div className="w-1/2 border-t border-gray-300 pt-1 mt-1 pr-2">
+                    <span className="text-gray-600 inline-block ml-2">الحجم الساعي:</span>
+                    <span>{totalVolume} سا</span>
+                </div>
+
+                <div className="w-full border-t border-gray-300 pt-1 mt-1">
+                    <span className="text-gray-600 ml-2">الأفواج المسندة:</span>
+                    <span>{formattedGroupsText}</span>
+                </div>
+            </div>
+
+            {/* CONTENT TABLE (Dynamic Columns for Groups) */}
+            <div className="flex-1 flex flex-col">
+                <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-bold text-xs underline">البرنامج البيداغوجي ومتابعة الإنجاز مع الأفواج:</h3>
+                </div>
+
+                {/* The Table - No Filler Rows */}
+                <table className="w-full border-collapse border border-black text-sm text-center mb-2">
+                    <thead>
+                        <tr className="bg-gray-200 h-10">
+                            <th className="border border-black w-10">رقم</th>
+                            <th className="border border-black">عناصر الدرس / الموضوع</th>
+                            <th className="border border-black w-16">المدة</th>
+                            {/* DYNAMIC GROUP COLUMNS */}
+                            {groupsData.length > 0 ? (
+                                groupsData.map(g => (
+                                    <th key={g.id} className="border border-black w-24">
+                                        <div className="text-[10px]">{g.name}</div>
+                                        <div className="text-[10px]">فوج {g.num}</div>
+                                    </th>
+                                ))
+                            ) : (
+                                <th className="border border-black w-24">الإنجاز</th>
+                            )}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {syllabus.map((topic, idx) => (
+                            <tr key={idx} className="h-12">
+                                <td className="border border-black font-bold bg-gray-50 py-1">{idx + 1}</td>
+                                <td className="border border-black text-right px-3 font-bold py-1 leading-snug">{topic.topic}</td>
+                                <td className="border border-black font-bold bg-gray-50 py-1">{topic.duration}</td>
+                                {/* Checkboxes for each group */}
+                                {groupsData.length > 0 ? (
+                                    groupsData.map(g => (
+                                        <td key={g.id} className="border border-black"></td>
+                                    ))
+                                ) : (
+                                    <td className="border border-black"></td>
+                                )}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+
+                {/* OBSERVATIONS SECTION - Fills some space cleanly without looking like a fake table */}
+                <div className="mt-2 border border-black rounded p-2 bg-gray-50 mb-2">
+                    <h4 className="font-bold underline text-xs mb-2">ملاحظات بيداغوجية عامة (تسجل عند نهاية الدورة):</h4>
+                    <div className="space-y-4">
+                        <div className="border-b border-dotted border-gray-400 h-6"></div>
+                        <div className="border-b border-dotted border-gray-400 h-6"></div>
+                        <div className="border-b border-dotted border-gray-400 h-6"></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* COMPACT FOOTER - PINNED TO BOTTOM */}
+            <div className="mt-auto flex justify-between items-end px-8 pb-0 pt-2">
+                <div className="text-center">
+                    <p className="font-bold text-xs mb-8">استلمت نسخة من البرنامج:</p>
+                    <p className="text-[10px]">إمضاء الأستاذ(ة): ....................</p>
+                </div>
+                <div className="text-center">
+                    <p className="font-bold text-xs mb-8">المدير البيداغوجي:</p>
+                    <p className="text-[10px]">الختم والتوقيع</p>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default ScheduleView;

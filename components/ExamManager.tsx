@@ -135,7 +135,7 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
 
     const getAllProctorNames = () => {
         const list: string[] = [];
-        Object.values(trainerConfig).forEach(conf => {
+        Object.values(trainerConfig).forEach((conf: any) => {
             if (conf.names) Object.values(conf.names).forEach(n => list.push(n as string));
         });
         externalProctors.forEach(p => list.push(p));
