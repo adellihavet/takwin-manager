@@ -697,7 +697,7 @@ const TraineeManager: React.FC = () => {
                             {/* Title Box - More Compact */}
                             <div className="text-center mb-4">
                                 <h1 className="text-2xl font-black bg-black text-white py-1 px-6 rounded-md inline-block shadow-md mb-2">
-                                    قائمة المتربصين (للعرض)
+                                    قائمة المتكونين 
                                 </h1>
                                 <div className="flex items-center justify-center gap-3">
                                     <h2 className="text-lg font-bold text-gray-800">

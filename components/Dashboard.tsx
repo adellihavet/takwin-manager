@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2, CheckCircle2, XCircle, Activity, AlertTriangle, Trash2, ArrowRight, BarChart3, GraduationCap, Clock, RefreshCw, Presentation, Settings2, Map, Flag, TrendingUp, PieChart as PieIcon, Printer } from 'lucide-react';
+import { Users, Calendar, Layers, Edit2, Save, X, UserCog, Database, Upload, Download, Building2, MapPin, UserCheck, Loader2, CheckCircle2, XCircle, Activity, AlertTriangle, Trash2, ArrowRight, BarChart3, GraduationCap, Clock, RefreshCw, Presentation, Settings2, Map, Flag, TrendingUp, PieChart as PieIcon, Printer, FileBadge } from 'lucide-react';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS, MODULES } from '../constants';
 import { Specialty, TrainerConfig, ProjectDatabase, InstitutionConfig, Trainee, AttendanceRecord } from '../types';
 import { downloadJSON, readJSONFile, formatDate } from '../utils';
@@ -262,6 +262,49 @@ const Dashboard: React.FC = () => {
       }
   };
 
+  // --- PRINT TRAINER BADGES ---
+  const handlePrintBadges = () => {
+      const content = document.getElementById('trainer-badges-template');
+      let printSection = document.getElementById('print-section');
+      
+      if (!printSection) {
+          printSection = document.createElement('div');
+          printSection.id = 'print-section';
+          document.body.appendChild(printSection);
+      }
+      
+      if (content && printSection) {
+          printSection.innerHTML = '';
+          const clone = content.cloneNode(true) as HTMLElement;
+          clone.classList.remove('hidden');
+          printSection.appendChild(clone);
+          setTimeout(() => window.print(), 300);
+      }
+  };
+
+  // Helper to extract unique trainers for badges
+  const getTrainerListForBadges = () => {
+      const list: { name: string, module: string }[] = [];
+      const seen = new Set<string>();
+
+      MODULES.forEach(m => {
+          const conf = trainerConfig[m.id];
+          if (conf && conf.names) {
+              Object.values(conf.names).forEach(name => {
+                  if (name && name.trim().length > 1) {
+                      // Create unique key to avoid duplicates if same teacher teaches multiple groups of same module
+                      const uniqueKey = `${name.trim()}-${m.id}`;
+                      if (!seen.has(uniqueKey)) {
+                          seen.add(uniqueKey);
+                          list.push({ name: name.trim(), module: m.shortTitle });
+                      }
+                  }
+              });
+          }
+      });
+      return list;
+  };
+
   // --- STATS CALCULATION ---
   const totalTrainees = trainees.length > 0 ? trainees.length : specialties.reduce((acc, curr) => acc + curr.count, 0);
   const totalGroups = specialties.reduce((acc, curr) => acc + curr.groups, 0);
@@ -331,6 +374,9 @@ const Dashboard: React.FC = () => {
           .slice(0, 5)
           .map(([name, count]) => ({ name, count }));
   };
+
+  const FLAG_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Flag_of_Algeria.svg/320px-Flag_of_Algeria.svg.png";
+  const LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/%D9%88%D8%B2%D8%A7%D8%B1%D8%A9_%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9_%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9.svg/960px-%D9%88%D8%B2%D8%A7%D8%B1%D8%A9_%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9_%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9.svg.png?20230207012220";
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -857,7 +903,7 @@ const Dashboard: React.FC = () => {
                                 <button 
                                     onClick={handlePrintDoorSigns}
                                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
-                                    title="طباعة قصاصات الأبواب"
+                                    title="طباعة لافتات الأبواب"
                                 >
                                     <Printer className="w-3.5 h-3.5" />
                                     لافتات الأبواب
@@ -943,6 +989,14 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-lg font-bold text-white">إدارة الطاقم البيداغوجي</h3>
                         </div>
                         <div className="flex gap-2">
+                            <button 
+                                onClick={handlePrintBadges}
+                                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
+                                title="طباعة شارات الأساتذة"
+                            >
+                                <FileBadge className="w-3.5 h-3.5" />
+                                الشارات
+                            </button>
                             {!isEditingTrainers ? (
                                 <button 
                                     onClick={handleEditTrainers}
@@ -1127,6 +1181,49 @@ const Dashboard: React.FC = () => {
                   );
               })
           ))}
+      </div>
+
+      {/* HIDDEN PRINT TEMPLATE: TRAINER BADGES */}
+      <div id="trainer-badges-template" className="hidden">
+          <div className="grid grid-cols-2 gap-4 p-4 w-[210mm] min-h-[297mm] bg-white text-black" style={{ direction: 'rtl' }}>
+              {getTrainerListForBadges().map((trainer, index) => (
+                  <div key={index} className="border-4 border-double border-green-700 rounded-xl p-4 flex flex-col items-center relative overflow-hidden bg-white shadow-sm h-[250px]">
+                      {/* Badge Header */}
+                      <div className="w-full flex justify-between items-start border-b border-gray-300 pb-2 mb-2">
+                          <img src={LOGO_URL} className="w-12 h-12 object-contain" alt="Logo" />
+                          <div className="text-center text-[10px] font-bold leading-tight flex-1 px-2 pt-1">
+                              <p>الجمهورية الجزائرية الديمقراطية الشعبية</p>
+                              <p>وزارة التربية الوطنية</p>
+                              <p className="mt-1 text-green-800">مديرية التربية {institution.wilaya}</p>
+                          </div>
+                          <img src={FLAG_URL} className="w-12 h-8 object-cover rounded shadow-sm mt-1" alt="Flag" />
+                      </div>
+
+                      {/* Badge Content */}
+                      <div className="flex-1 flex flex-col justify-center items-center w-full">
+                          <div className="bg-green-700 text-white px-6 py-1 rounded-full text-xs font-bold mb-3 shadow-md">
+                              الأيام التكوينية 2025 / 2026
+                          </div>
+                          
+                          <h2 className="text-xl font-black text-gray-800 mb-1">أستاذ مكوّن</h2>
+                          
+                          <div className="text-center mt-2 w-full">
+                              <p className="text-2xl font-bold text-blue-900 border-b-2 border-dotted border-blue-200 pb-1 mb-1 truncate px-2">
+                                  {trainer.name}
+                              </p>
+                              <p className="text-sm font-bold text-gray-500">
+                                  المقياس: {trainer.module}
+                              </p>
+                          </div>
+                      </div>
+
+                      {/* Badge Footer */}
+                      <div className="w-full text-center border-t border-gray-300 pt-1 mt-auto">
+                          <p className="text-[10px] font-bold text-gray-600">{institution.center}</p>
+                      </div>
+                  </div>
+              ))}
+          </div>
       </div>
 
     </div>
