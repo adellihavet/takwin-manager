@@ -1,17 +1,8 @@
-
 import { format, eachDayOfInterval, isFriday, parseISO, isSameDay } from 'date-fns';
 import { arDZ } from 'date-fns/locale';
 
 export const formatDate = (dateStr: string) => {
   return format(parseISO(dateStr), 'EEEE d MMMM yyyy', { locale: arDZ });
-};
-
-// دالة حاسمة لضمان تطابق مفاتيح الغياب في كل النظام
-export const formatDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
 };
 
 export const getSessionDays = (startDate: string, endDate: string) => {

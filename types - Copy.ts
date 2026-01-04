@@ -126,13 +126,8 @@ export interface Trainee {
   groupId?: number;
 }
 
-// Key: "YYYY-MM-DD-TraineeID", Value: Detailed Object
-export type AttendanceStatus = 'P' | 'A' | 'J'; // Present, Absent, Justified
-export interface AttendanceDetail {
-    status: AttendanceStatus;
-    note?: string;
-}
-export type AttendanceRecord = Record<string, AttendanceDetail>;
+// Key: "YYYY-MM-DD-TraineeID", Value: 'P' (Present) | 'A' (Absent)
+export type AttendanceRecord = Record<string, 'P' | 'A'>;
 
 // --- UPDATED GRADING TYPES ---
 export interface ModuleGrades {
