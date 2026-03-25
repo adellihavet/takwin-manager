@@ -21,8 +21,8 @@ export const SESSIONS: SessionInfo[] = [
   { 
     id: 2, 
     name: 'الدورة الثانية', 
-    startDate: '2026-03-23', 
-    endDate: '2026-04-02', 
+    startDate: '2026-03-28', 
+    endDate: '2026-04-25', 
     daysCount: 10, 
     hoursTotal: 50,
     description: 'المرحلة الثانية: بناء المهارات العملية وتعميق الجوانب التطبيقية'

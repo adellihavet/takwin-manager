@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info, FileText, LayoutGrid, CheckCircle2, AlertTriangle, FileWarning } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig, AttendanceRecord, AttendanceStatus, SessionInfo } from '../types';
@@ -189,6 +188,7 @@ const TraineeManager: React.FC = () => {
         if (content && printSection) { printSection.innerHTML = ''; const clone = content.cloneNode(true) as HTMLElement; clone.classList.remove('hidden'); printSection.appendChild(clone); window.print(); }
     };
 
+    // مدمج من الملف القديم: وظيفة طباعة قائمة التعليق
     const handlePrintPostingList = () => {
         const content = document.getElementById('posting-list-template');
         let printSection = document.getElementById('print-section');
@@ -269,7 +269,6 @@ const TraineeManager: React.FC = () => {
                             {trainees.length > 0 && <button onClick={() => saveTrainees([])} className="btn-danger flex gap-2 items-center bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Trash2 className="w-4 h-4"/> حذف الكل</button>}
                         </div>
                     </div>
-                    {/* ... Rest of List Table ... */}
                     <div className="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-slate-950 text-slate-400">
@@ -337,6 +336,10 @@ const TraineeManager: React.FC = () => {
                         )}
 
                         <div className="mr-auto flex gap-2">
+                            {/* مدمج من الملف القديم: زر طباعة قائمة التعليق */}
+                            <button onClick={handlePrintPostingList} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold transition-colors shadow-lg">
+                                <FileText className="w-4 h-4" /> طباعة قائمة المتكونين
+                            </button>
                             <button onClick={handlePrintAbsenceSlip} className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold transition-colors shadow-lg">
                                 <FileWarning className="w-4 h-4" /> كشف غيابات المكون
                             </button>
@@ -434,13 +437,12 @@ const TraineeManager: React.FC = () => {
                                     </tbody>
                                 </table>
                             </div>
-                            <div className="p-3 bg-slate-950/50 border-t border-slate-800 text-[10px] text-slate-500 italic">
-                                * الأرقام (1-N) تمثل أيام العمل الفعلية في الدورة. انقر على أي خلية لتغيير الحالة.
-                            </div>
                         </div>
                     )}
-                    {/* ... Rest of Templates ... */}
-                    {/* ATTENDANCE SHEET TEMPLATE */}
+
+                    {/* --- PRINT TEMPLATES --- */}
+
+                    {/* 1. DAILY ATTENDANCE SHEET */}
                     <div id="attendance-print-template" className="hidden">
                         <div className="p-8 bg-white text-black h-full" style={{ direction: 'rtl' }}>
                             <div className="text-center mb-4 border-b-2 border-black pb-2">
@@ -486,7 +488,57 @@ const TraineeManager: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* ABSENCE SLIP TEMPLATE */}
+                    {/* 2. POSTING LIST (مدمج من الملف القديم) */}
+                    <div id="posting-list-template" className="hidden">
+                        <div className={`p-4 bg-white text-black h-full border-4 ${getBorderColor()} rounded-lg flex flex-col`} style={{ direction: 'rtl' }}>
+                            <div className="text-center mb-2">
+                                <h3 className="font-bold text-base mb-1">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                                <div className="flex justify-between mt-2 border-t border-black pt-1 text-xs font-bold px-2">
+                                    <span>مديرية التربية: {institution.wilaya}</span>
+                                    <span>مركز التكوين: {institution.center}</span>
+                                </div>
+                            </div>
+                            <div className="text-center mb-4">
+                                <h1 className="text-2xl font-black bg-black text-white py-1 px-6 rounded-md inline-block shadow-md mb-2">قائمة المتكونين</h1>
+                                <div className="flex items-center justify-center gap-3">
+                                    <h2 className="text-lg font-bold text-gray-800">التخصص: {specialties.find(s => s.id === selectedGroupSpec)?.name}</h2>
+                                    <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded border border-gray-300">
+                                        <span className="text-xl font-bold">فــــــــوج:</span>
+                                        <span className="text-3xl font-black">{selectedGroupNum}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex-1">
+                                <table className="w-full border-2 border-black text-center text-sm table-fixed">
+                                    <thead className="bg-gray-100 h-8 border-b-2 border-black">
+                                        <tr>
+                                            <th className="border border-black w-10 py-1">رقم</th>
+                                            <th className="border border-black py-1">اللقب</th>
+                                            <th className="border border-black py-1">الاسم</th>
+                                            <th className="border border-black w-28 py-1">تاريخ الميلاد</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {groupTrainees.map((t, idx) => (
+                                            <tr key={t.id} className={`h-8 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                                <td className="border border-black font-bold">{idx + 1}</td>
+                                                <td className="border border-black font-bold text-right px-3">{t.surname}</td>
+                                                <td className="border border-black font-bold text-right px-3">{t.name}</td>
+                                                <td className="border border-black font-bold text-xs" dir="ltr">{t.dob}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div className="mt-4 pt-2 border-t-2 border-black flex justify-between items-end px-4">
+                                <div className="text-sm font-bold">العدد الإجمالي: {groupTrainees.length} متربص</div>
+                                <div className="text-center"><p className="font-bold text-sm mb-8">المدير البيداغوجي</p></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 3. ABSENCE SLIP TEMPLATE */}
                     <div id="absence-slip-template" className="hidden">
                         <div className={`p-10 bg-white text-black h-full border-[10px] ${getBorderColor()} rounded-[3rem] flex flex-col`} style={{ direction: 'rtl' }}>
                             <div className="text-center mb-6">
@@ -497,7 +549,6 @@ const TraineeManager: React.FC = () => {
                                     <span>مركز التكوين {institution.center}</span>
                                 </div>
                             </div>
-
                             <div className="text-center mb-8">
                                 <h1 className="text-3xl font-black underline decoration-double mb-4">كشف متابعة غيابات المتربصين</h1>
                                 <div className="bg-gray-100 p-4 border-2 border-black rounded-xl inline-block w-full">
@@ -509,27 +560,17 @@ const TraineeManager: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-
-                            <div className="mb-6 leading-relaxed text-lg">
-                                <p>السيد الأستاذ المكون، تجدون أدناه قائمة المتربصين الذين سجلوا غيابات خلال هذه الدورة، وذلك لاعتمادها في رصد علامة المواظبة:</p>
-                            </div>
-
                             <div className="flex-1">
                                 <table className="w-full border-2 border-black text-center text-base border-collapse">
                                     <thead className="bg-gray-200">
-                                        <tr className="h-12">
-                                            <th className="border border-black p-2 w-12">رقم</th>
-                                            <th className="border border-black p-2 w-1/3">اللقب والاسم</th>
-                                            <th className="border border-black p-2 w-1/2">تواريخ الغياب المسجلة</th>
-                                            <th className="border border-black p-2">المجموع</th>
-                                        </tr>
+                                        <tr className="h-12"><th className="border border-black p-2 w-12">رقم</th><th className="border border-black p-2 w-1/3">اللقب والاسم</th><th className="border border-black p-2 w-1/2">تواريخ الغياب</th><th className="border border-black p-2">المجموع</th></tr>
                                     </thead>
                                     <tbody>
                                         {getAbsenceListForPrint().map((item, idx) => (
                                             <tr key={idx} className="min-h-16">
                                                 <td className="border border-black p-2 font-bold">{idx + 1}</td>
                                                 <td className="border border-black p-2 font-black text-right px-4">{item.trainee.surname} {item.trainee.name}</td>
-                                                <td className="border border-black p-2 text-sm text-right px-4 leading-normal">
+                                                <td className="border border-black p-2 text-sm text-right px-4">
                                                     {item.absences.map((a, i) => (
                                                         <span key={i} className={`inline-block ml-2 mb-1 p-1 rounded border ${a.status === 'J' ? 'bg-orange-50 border-orange-200 text-orange-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
                                                             {a.date} {a.status === 'J' ? '(مبرر)' : ''}
@@ -539,22 +580,12 @@ const TraineeManager: React.FC = () => {
                                                 <td className="border border-black p-2 font-black text-2xl bg-gray-50">{item.absences.length}</td>
                                             </tr>
                                         ))}
-                                        {getAbsenceListForPrint().length === 0 && (
-                                            <tr><td colSpan={4} className="p-12 text-center text-2xl font-bold text-gray-400">لم يتم تسجيل أي غياب لهذا الفوج خلال الدورة.</td></tr>
-                                        )}
                                     </tbody>
                                 </table>
                             </div>
-
                             <div className="mt-8 flex justify-between items-end px-10">
-                                <div className="text-center font-bold">
-                                    <p className="mb-20 text-sm">استلمت من طرف الأستاذ المكون</p>
-                                    <p className="text-xs">التوقيع: ....................</p>
-                                </div>
-                                <div className="text-center font-bold">
-                                    <p className="mb-20">المدير البيداغوجي للمركز</p>
-                                    <p className="text-xs">الختم والتوقيع</p>
-                                </div>
+                                <div className="text-center font-bold"><p className="mb-20">استلمت من طرف المكون</p></div>
+                                <div className="text-center font-bold"><p className="mb-20">المدير البيداغوجي</p></div>
                             </div>
                         </div>
                     </div>

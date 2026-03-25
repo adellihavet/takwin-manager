@@ -1,12 +1,11 @@
-
-import { format, eachDayOfInterval, isFriday, parseISO, isSameDay } from 'date-fns';
+import { format, eachDayOfInterval, isFriday, parseISO, isSameDay, isSaturday } from 'date-fns';
 import { arDZ } from 'date-fns/locale';
 
 export const formatDate = (dateStr: string) => {
   return format(parseISO(dateStr), 'EEEE d MMMM yyyy', { locale: arDZ });
 };
 
-// دالة حاسمة لضمان تطابق مفاتيح الغياب في كل النظام
+// تم استعادة هذه الدالة لإصلاح خطأ الكونسول
 export const formatDateKey = (date: Date) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -19,12 +18,24 @@ export const getSessionDays = (startDate: string, endDate: string) => {
   const end = parseISO(endDate);
   const days = eachDayOfInterval({ start, end });
   
-  // Filter out Fridays
+  // المنطق الخاص بالدورة الثانية في الجزائر 2026
+  if (startDate === '2026-03-28' && endDate === '2026-04-25') {
+    return days.filter(day => {
+      const dayStr = format(day, 'yyyy-MM-dd');
+      if (dayStr >= '2026-03-28' && dayStr <= '2026-04-02') {
+        return !isFriday(day);
+      }
+      if (dayStr > '2026-04-02') {
+        return isSaturday(day);
+      }
+      return false;
+    });
+  }
+
   return days.filter(day => !isFriday(day));
 };
 
 export const isHoliday = (date: Date) => {
-  // Check specifically for July 5th
   if (date.getMonth() === 6 && date.getDate() === 5) return true;
   return false;
 };
@@ -34,7 +45,6 @@ export const getWorkingDays = (startDate: string, endDate: string) => {
   return days.filter(d => !isHoliday(d));
 };
 
-// Database Helpers
 export const downloadJSON = (data: object, filename: string) => {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);

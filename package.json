@@ -6,13 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "date-fns": "^4.1.0",
-    "lucide-react": "^0.554.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "lucide-react": "^0.554.0",
+    "date-fns": "^4.1.0",
     "recharts": "^3.5.0",
     "xlsx": "^0.18.5"
   },
