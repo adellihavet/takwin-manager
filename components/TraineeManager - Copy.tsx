@@ -2,14 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info, FileText, LayoutGrid, CheckCircle2, AlertTriangle, FileWarning } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig, AttendanceRecord, AttendanceStatus, SessionInfo } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS } from '../constants';
-import { getWorkingDays, formatDate } from '../utils';
-
-const formatDateKey = (date: Date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-};
+import { getWorkingDays, formatDate, formatDateKey } from '../utils';
 
 const TraineeManager: React.FC = () => {
     // Data State
@@ -276,69 +269,6 @@ const TraineeManager: React.FC = () => {
                             {trainees.length > 0 && <button onClick={() => saveTrainees([])} className="btn-danger flex gap-2 items-center bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"><Trash2 className="w-4 h-4"/> حذف الكل</button>}
                         </div>
                     </div>
-                    
-                    {/* Add Form (Modal) */}
-                    {isAdding && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
-                            <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl p-6 relative">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                        <Plus className="text-blue-500 w-5 h-5" />
-                                        إضافة متربص جديد
-                                    </h3>
-                                    <button onClick={() => setIsAdding(false)} className="text-slate-400 hover:text-white">
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">اللقب</label>
-                                        <input placeholder="اللقب" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.surname || ''} onChange={e => setNewTrainee({...newTrainee, surname: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">الاسم</label>
-                                        <input placeholder="الاسم" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.name || ''} onChange={e => setNewTrainee({...newTrainee, name: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">تاريخ الميلاد</label>
-                                        <input type="date" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.dob || ''} onChange={e => setNewTrainee({...newTrainee, dob: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">مكان الميلاد</label>
-                                        <input placeholder="مكان الميلاد" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.pob || ''} onChange={e => setNewTrainee({...newTrainee, pob: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">التخصص</label>
-                                        <select className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.specialtyId} onChange={e => setNewTrainee({...newTrainee, specialtyId: e.target.value})}>
-                                            {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">الجنس</label>
-                                        <select className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.gender} onChange={e => setNewTrainee({...newTrainee, gender: e.target.value as 'M'|'F'})}>
-                                            <option value="M">ذكر</option>
-                                            <option value="F">أنثى</option>
-                                        </select>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">مؤسسة العمل</label>
-                                        <input placeholder="المؤسسة" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.school || ''} onChange={e => setNewTrainee({...newTrainee, school: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">البلدية</label>
-                                        <input placeholder="البلدية" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.municipality || ''} onChange={e => setNewTrainee({...newTrainee, municipality: e.target.value})} />
-                                    </div>
-                                </div>
-                                
-                                <div className="flex justify-end gap-3">
-                                    <button onClick={() => setIsAdding(false)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-6 py-2.5 rounded-xl transition-all">إلغاء</button>
-                                    <button onClick={handleSmartAdd} className="bg-green-600 hover:bg-green-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-green-900/20">حفظ وإضافة</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     <div className="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-slate-950 text-slate-400">
