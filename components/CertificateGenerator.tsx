@@ -83,7 +83,7 @@ const CertificateGenerator: React.FC = () => {
                             <Calendar className="w-4 h-4 text-amber-400" />
                             تاريخ محضر المداولات:
                         </label>
-                        <input type="text" placeholder="2026/07/25" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none focus:border-amber-500 text-right font-bold" value={deliberationDate} onChange={e => setDeliberationDate(e.target.value)} />
+                        <input type="text" placeholder="2026/07/30" className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white outline-none focus:border-amber-500 text-right font-bold" value={deliberationDate} onChange={e => setDeliberationDate(e.target.value)} />
                     </div>
                     <div className="space-y-2">
                         <label className="text-slate-300 font-bold text-sm flex items-center gap-2">

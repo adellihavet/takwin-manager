@@ -290,13 +290,15 @@ const Dashboard: React.FC = () => {
       MODULES.forEach(m => {
           const conf = trainerConfig[m.id];
           if (conf && conf.names) {
+              // Fix: Added explicit casting for 'name' to string to avoid 'unknown' type errors
               Object.values(conf.names).forEach(name => {
-                  if (name && name.trim().length > 1) {
+                  const trainerName = name as string;
+                  if (trainerName && trainerName.trim().length > 1) {
                       // Create unique key to avoid duplicates if same teacher teaches multiple groups of same module
-                      const uniqueKey = `${name.trim()}-${m.id}`;
+                      const uniqueKey = `${trainerName.trim()}-${m.id}`;
                       if (!seen.has(uniqueKey)) {
                           seen.add(uniqueKey);
-                          list.push({ name: name.trim(), module: m.shortTitle });
+                          list.push({ name: trainerName.trim(), module: m.shortTitle });
                       }
                   }
               });
@@ -316,7 +318,7 @@ const Dashboard: React.FC = () => {
   const malePercent = totalTrainees > 0 ? (maleCount / totalTrainees) * 100 : 50;
 
   // Absences
-  const totalAbsences = Object.values(attendance).filter(status => status === 'A').length;
+  const totalAbsences = Object.values(attendance).filter(record => (record as any).status === 'A').length;
   const absenceStatus = totalAbsences === 0 ? 'ممتاز' : totalAbsences < 10 ? 'جيد' : 'مقلق';
   const absenceColor = totalAbsences === 0 ? 'text-emerald-400' : totalAbsences < 10 ? 'text-amber-400' : 'text-red-400';
 
@@ -325,9 +327,11 @@ const Dashboard: React.FC = () => {
       const names = new Set<string>();
       Object.values(trainerConfig).forEach((conf: any) => {
           if (conf.names) {
+              // Fix: Added explicit casting for 'name' to string to avoid 'unknown' type errors
               Object.values(conf.names).forEach((name: unknown) => {
-                  if (typeof name === 'string' && name.trim().length > 1) {
-                      names.add(name.trim().toLowerCase());
+                  const trainerName = name as string;
+                  if (typeof trainerName === 'string' && trainerName.trim().length > 1) {
+                      names.add(trainerName.trim().toLowerCase());
                   }
               });
           }
@@ -456,7 +460,7 @@ const Dashboard: React.FC = () => {
                       <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-700 -translate-y-1/2 z-0 hidden md:block"></div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative z-10">
-                          {[...SESSIONS, { id: 4, name: 'الامتحان النهائي', startDate: '2026-07-25', endDate: '2026-07-27', description: 'اختتام التكوين والمداولات' }].map((session, idx) => {
+                          {[...SESSIONS, { id: 4, name: 'الامتحان النهائي', startDate: '2026-07-28', endDate: '2026-07-30', description: 'اختتام التكوين والمداولات' }].map((session, idx) => {
                               // Determine status roughly based on date (mock logic for demo, real logic compares with today)
                               const today = new Date().toISOString().split('T')[0];
                               // Use optional chaining or fallback to avoid TS error, though we added endDate now
@@ -479,7 +483,8 @@ const Dashboard: React.FC = () => {
                                       </div>
                                       <h4 className="font-bold text-white text-lg">{session.name}</h4>
                                       <p className="text-slate-400 text-sm mt-1 font-mono">{formatDate(session.startDate).split(' ').slice(1,3).join(' ')}</p>
-                                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">{session.description?.split(':')[0]}</p>
+                                      {/* Fix: Added explicit casting for session.description if it's considered unknown */}
+                                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">{(session.description as string)?.split(':')[0]}</p>
                                   </div>
                               );
                           })}

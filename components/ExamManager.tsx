@@ -30,9 +30,9 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
 
     // Constants
     const EXAM_DAYS = [
-        { date: '2026-07-25', label: 'السبت 25 جويلية 2026' },
-        { date: '2026-07-26', label: 'الأحد 26 جويلية 2026' },
-        { date: '2026-07-27', label: 'الاثنين 27 جويلية 2026' },
+        { date: '2026-07-28', label: 'الثلاثاء 28 جويلية 2026' },
+        { date: '2026-07-29', label: 'الأربعاء 29 جويلية 2026' },
+        { date: '2026-07-30', label: 'الخميس 30 جويلية 2026' },
     ];
 
     // Load Data
@@ -579,7 +579,7 @@ const ExamManager: React.FC<ExamManagerProps> = ({ trainees, specialties, instit
                 <div className="bg-slate-900/80 p-6 rounded-2xl border border-slate-800">
                     <h3 className="text-white font-bold mb-6 flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-purple-400" />
-                        ضبط رزنامة الامتحانات (25 - 27 جويلية 2026)
+                        ضبط رزنامة الامتحانات (28 - 30 جويلية 2026)
                     </h3>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
