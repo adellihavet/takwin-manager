@@ -43,7 +43,17 @@ const TraineeManager: React.FC = () => {
         if (savedTrainees) try { setTrainees(JSON.parse(savedTrainees)); } catch(e) {}
         
         const savedSpec = localStorage.getItem('takwin_specialties_db');
-        if (savedSpec) try { setSpecialties(JSON.parse(savedSpec)); } catch(e) {}
+        if (savedSpec) {
+            try {
+                const parsed: Specialty[] = JSON.parse(savedSpec);
+                const updated = parsed.map(s => {
+                    const def = DEFAULT_SPECIALTIES.find(d => d.id === s.id);
+                    return def ? { ...s, name: def.name, color: def.color || s.color } : s;
+                });
+                setSpecialties(updated);
+                localStorage.setItem('takwin_specialties_db', JSON.stringify(updated));
+            } catch(e) {}
+        }
 
         const savedInst = localStorage.getItem('takwin_institution_db');
         if (savedInst) try { setInstitution(JSON.parse(savedInst)); } catch(e) {}

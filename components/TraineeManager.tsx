@@ -390,21 +390,122 @@ const TraineeManager: React.FC = () => {
                         </div>
                     )}
 
+                    {/* Transfer Group Modal */}
+                    {transferTarget && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+                            <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md p-6 relative">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <ArrowRightLeft className="text-purple-500 w-5 h-5" />
+                                        تحويل المتربص إلى فوج آخر
+                                    </h3>
+                                    <button onClick={() => setTransferTarget(null)} className="text-slate-400 hover:text-white">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-4 mb-6">
+                                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-2 text-right">
+                                        <p className="text-sm text-slate-400">الاسم واللقب: <span className="text-white font-bold">{transferTarget.surname} {transferTarget.name}</span></p>
+                                        <p className="text-sm text-slate-400">التخصص: <span className="text-white font-bold">{specialties.find(s => s.id === transferTarget.specialtyId)?.name || transferTarget.specialtyId}</span></p>
+                                        <p className="text-sm text-slate-400">الفوج الحالي: <span className="text-purple-400 font-bold">{transferTarget.groupId ? `الفوج ${transferTarget.groupId}` : 'غير محدد'}</span></p>
+                                    </div>
+                                    
+                                    <div className="space-y-2">
+                                        <label className="text-xs text-slate-400 font-bold block text-right">اختر الفوج الجديد للمتربص:</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {Array.from({ length: specialties.find(s => s.id === transferTarget.specialtyId)?.groups || 1 }).map((_, i) => {
+                                                const groupNum = i + 1;
+                                                const isCurrent = transferTarget.groupId === groupNum;
+                                                return (
+                                                    <button
+                                                        key={groupNum}
+                                                        disabled={isCurrent}
+                                                        onClick={() => handleTransfer(groupNum)}
+                                                        className={`p-3 rounded-xl font-bold transition-all text-center border ${isCurrent ? 'bg-slate-800 text-slate-500 border-slate-800 cursor-not-allowed' : 'bg-purple-600/10 text-purple-300 border-purple-500/20 hover:bg-purple-600 hover:text-white hover:border-purple-500'}`}
+                                                    >
+                                                        {isCurrent ? `الفوج ${groupNum} (الحالي)` : `الفوج ${groupNum}`}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex justify-end">
+                                    <button onClick={() => setTransferTarget(null)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-6 py-2.5 rounded-xl transition-all">إلغاء</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Search & Filter Controls */}
+                    <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-900/40 p-4 rounded-xl border border-slate-800/80 print:hidden mb-4">
+                        <div className="relative flex-1 w-full">
+                            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                            <input
+                                type="text"
+                                placeholder="بحث باسم أو لقب المتربص..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 text-white pl-4 pr-10 py-2 rounded-xl text-sm outline-none transition-colors text-right"
+                            />
+                        </div>
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <select
+                                value={filterSpecialty}
+                                onChange={e => setFilterSpecialty(e.target.value)}
+                                className="w-full md:w-48 bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded-xl text-sm outline-none focus:border-blue-500 text-right"
+                            >
+                                <option value="all">كل التخصصات</option>
+                                {specialties.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
                     <div className="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-slate-950 text-slate-400">
                                 <tr><th className="p-4">#</th><th className="p-4">اللقب والاسم</th><th className="p-4">التخصص</th><th className="p-4">الفوج</th><th className="p-4 text-center">إجراءات</th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
-                                {trainees.filter(t => filterSpecialty === 'all' || t.specialtyId === filterSpecialty).map((t, idx) => (
-                                    <tr key={t.id} className="hover:bg-slate-800/50">
-                                        <td className="p-4 text-slate-500">{idx + 1}</td>
-                                        <td className="p-4 font-bold text-white">{t.surname} {t.name}</td>
-                                        <td className="p-4">{specialties.find(s=>s.id === t.specialtyId)?.name}</td>
-                                        <td className="p-4"><span className="bg-purple-500/10 text-purple-300 px-2 py-1 rounded font-bold">{t.groupId ? `فوج ${t.groupId}` : '-'}</span></td>
-                                        <td className="p-4 text-center"><button onClick={() => saveTrainees(trainees.filter(x=>x.id!==t.id))} className="text-red-400 hover:text-red-300 p-1 hover:bg-slate-700 rounded transition-colors"><Trash2 className="w-4 h-4"/></button></td>
-                                    </tr>
-                                ))}
+                                {trainees
+                                    .filter(t => filterSpecialty === 'all' || t.specialtyId === filterSpecialty)
+                                    .filter(t => {
+                                        if (!searchTerm) return true;
+                                        const fullName = `${t.surname} ${t.name}`.toLowerCase();
+                                        return fullName.includes(searchTerm.toLowerCase());
+                                    })
+                                    .map((t, idx) => (
+                                        <tr key={t.id} className="hover:bg-slate-800/50">
+                                            <td className="p-4 text-slate-500">{idx + 1}</td>
+                                            <td className="p-4 font-bold text-white">{t.surname} {t.name}</td>
+                                            <td className="p-4">{specialties.find(s=>s.id === t.specialtyId)?.name}</td>
+                                            <td className="p-4"><span className="bg-purple-500/10 text-purple-300 px-2 py-1 rounded font-bold">{t.groupId ? `فوج ${t.groupId}` : '-'}</span></td>
+                                            <td className="p-4 text-center">
+                                                <button 
+                                                    onClick={() => setTransferTarget(t)} 
+                                                    className="text-purple-400 hover:text-purple-300 p-1.5 hover:bg-slate-800 rounded transition-colors ml-2 inline-flex items-center gap-1"
+                                                    title="تغيير الفوج"
+                                                >
+                                                    <ArrowRightLeft className="w-4 h-4" />
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        if (window.confirm(`هل أنت متأكد من حذف المتربص ${t.surname} ${t.name}؟`)) {
+                                                            saveTrainees(trainees.filter(x=>x.id!==t.id));
+                                                        }
+                                                    }} 
+                                                    className="text-red-400 hover:text-red-300 p-1.5 hover:bg-slate-800 rounded transition-colors inline-flex items-center"
+                                                    title="حذف"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
                             </tbody>
                         </table>
                     </div>
