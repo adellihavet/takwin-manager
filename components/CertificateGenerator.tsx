@@ -17,7 +17,17 @@ const CertificateGenerator: React.FC = () => {
         if (savedTrainees) try { setTrainees(JSON.parse(savedTrainees)); } catch(e) {}
         
         const savedSpec = localStorage.getItem('takwin_specialties_db');
-        if (savedSpec) try { setSpecialties(JSON.parse(savedSpec)); } catch(e) {}
+        if (savedSpec) {
+            try {
+                const parsed: Specialty[] = JSON.parse(savedSpec);
+                const updated = parsed.map(s => {
+                    const def = DEFAULT_SPECIALTIES.find(d => d.id === s.id);
+                    return def ? { ...s, name: def.name, color: def.color || s.color } : s;
+                });
+                setSpecialties(updated);
+                localStorage.setItem('takwin_specialties_db', JSON.stringify(updated));
+            } catch(e) {}
+        }
 
         const savedInst = localStorage.getItem('takwin_institution_db');
         if (savedInst) try { setInstitution(JSON.parse(savedInst)); } catch(e) {}
@@ -132,8 +142,6 @@ interface CertificateProps {
 }
 
 const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, specialtyName, deliberationDate, signatureDate }) => {
-    const LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/%D9%88%D8%B2%D8%A7%D8%B1%D8%A9_%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9_%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9.svg/960px-%D9%88%D8%B2%D8%A7%D8%B1%D8%A9_%D8%A7%D9%84%D8%AA%D8%B1%D8%A8%D9%8A%D8%A9_%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A%D8%A9.svg.png";
-    const FLAG_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/7/77/Flag_of_Algeria.svg/320px-Flag_of_Algeria.svg.png";
     
     // --- دوال التواريخ (مهمة جداً لضبط الاتجاه) ---
     const formatDate = (dateString: string | undefined) => {
@@ -188,12 +196,6 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                 
                 {/* 1. National Header */}
                 <div className="relative mb-1 pt-4">
-                    <div className="absolute top-2 right-0">
-                        <img src={FLAG_URL} alt="Flag" className="w-24 shadow-sm border border-slate-100" />
-                    </div>
-                    <div className="absolute top-2 left-0">
-                        <img src={LOGO_URL} alt="Logo" className="w-20" />
-                    </div>
                     <div className="text-center font-amiri font-bold text-2xl space-y-0.5">
                         <p className="tracking-widest">الجمهورية الجزائرية الديمقراطية الشعبية</p>
                         <p>وزارة التربية الوطنية</p>

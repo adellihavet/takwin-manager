@@ -210,6 +210,47 @@ const TraineeManager: React.FC = () => {
         if (content && printSection) { printSection.innerHTML = ''; const clone = content.cloneNode(true) as HTMLElement; clone.classList.remove('hidden'); printSection.appendChild(clone); window.print(); }
     };
 
+    const downloadGroupExcel = () => {
+        if (groupTrainees.length === 0) {
+            alert("لا توجد بيانات لتنزيلها لهذا الفوج.");
+            return;
+        }
+
+        const specName = specialties.find(s => s.id === selectedGroupSpec)?.name || '';
+        const headers = ["الرقم", "اللقب و الاسم", "تاريخ الميلاد", "ولاية المترشح(ة)", "التخصص"];
+
+        const csvRows = groupTrainees.map((t, idx) => {
+            const rowNumber = idx + 1;
+            const fullName = `${t.surname} ${t.name}`;
+            const dob = t.dob || '';
+            const wilaya = t.municipality || '';
+            const specialty = specName;
+
+            const escape = (str: string | number) => `"${String(str).replace(/"/g, '""')}"`;
+
+            return [
+                escape(rowNumber),
+                escape(fullName),
+                escape(dob),
+                escape(wilaya),
+                escape(specialty)
+            ].join(",");
+        });
+
+        const BOM = "\uFEFF";
+        const csvContent = BOM + headers.join(",") + "\n" + csvRows.join("\n");
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const fileName = `قائمة_فوج_${selectedGroupNum}_${specName.replace(/\s+/g, '_')}.csv`;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     // Derived Data for Matrix
     const currentSession = SESSIONS.find(s => s.id === selectedSessionId) || SESSIONS[0];
     const workingDays = getWorkingDays(currentSession.startDate, currentSession.endDate);
@@ -415,6 +456,9 @@ const TraineeManager: React.FC = () => {
                             </button>
                             <button onClick={handlePrintGroup} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-bold transition-colors shadow-lg">
                                 <Printer className="w-4 h-4" /> ورقة الحضور
+                            </button>
+                            <button onClick={downloadGroupExcel} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-bold transition-colors shadow-lg">
+                                <Download className="w-4 h-4" /> تحميل القائمة Excel
                             </button>
                         </div>
                     </div>

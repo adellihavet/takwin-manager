@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Upload, FileSpreadsheet, Printer, Award, Calculator, Settings, BookOpen, UserCheck, Calendar, Clock, Users, ChevronDown, ChevronUp, AlertCircle, Save, Eye, X, FileUp, Edit2, Lock, Unlock, FileText } from 'lucide-react';
+import { Download, Upload, FileSpreadsheet, Printer, Award, Calculator, Settings, BookOpen, UserCheck, Calendar, Clock, Users, ChevronDown, ChevronUp, AlertCircle, Save, Eye, X, FileUp, Edit2, Lock, Unlock, FileText, ClipboardList } from 'lucide-react';
 import { Trainee, Specialty, EvaluationDatabase, InstitutionConfig, TrainerConfig, TrainerAssignment } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, MODULES } from '../constants';
 import ExamManager from './ExamManager';
@@ -17,9 +17,36 @@ const EvaluationManager: React.FC = () => {
     const [assignments, setAssignments] = useState<TrainerAssignment[]>([]);
 
     // UI State
-    const [activeTab, setActiveTab] = useState<'entry' | 'exams' | 'deliberation'>('entry');
+    const [activeTab, setActiveTab] = useState<'entry' | 'exams' | 'deliberation' | 'receipt'>('entry');
     const [selectedTraineeForDetail, setSelectedTraineeForDetail] = useState<Trainee | null>(null);
     const [editingCell, setEditingCell] = useState<string | null>(null); // Format: "traineeId-type"
+    
+    // State for manual paper lists
+    const [manualPrintData, setManualPrintData] = useState<{
+        groupName: string;
+        specialtyName: string;
+        moduleTitle: string;
+        teacherName: string;
+        term: string;
+        termLabel: string;
+        list: Trainee[];
+    }[]>([]);
+
+    const [reportPrintData, setReportPrintData] = useState<{
+        groupName: string;
+        specialtyName: string;
+        teacherName: string;
+        list: Trainee[];
+    }[]>([]);
+
+    // Receipts Database State
+    const [receipts, setReceipts] = useState<Record<string, { status: 'pending' | 'received', receivedDate?: string, notes?: string }>>({});
+
+    // Receipts Filters State
+    const [receiptFilterSpec, setReceiptFilterSpec] = useState<string>('all');
+    const [receiptFilterModule, setReceiptFilterModule] = useState<string>('all');
+    const [receiptFilterType, setReceiptFilterType] = useState<string>('all');
+    const [receiptFilterStatus, setReceiptFilterStatus] = useState<string>('all');
     
     // Entry State
     const [selectedSpec, setSelectedSpec] = useState<string>('all');
@@ -56,7 +83,17 @@ const EvaluationManager: React.FC = () => {
         if (savedTrainees) try { setTrainees(JSON.parse(savedTrainees)); } catch(e) {}
         
         const savedSpec = localStorage.getItem('takwin_specialties_db');
-        if (savedSpec) try { setSpecialties(JSON.parse(savedSpec)); } catch(e) {}
+        if (savedSpec) {
+            try {
+                const parsed: Specialty[] = JSON.parse(savedSpec);
+                const updated = parsed.map(s => {
+                    const def = DEFAULT_SPECIALTIES.find(d => d.id === s.id);
+                    return def ? { ...s, name: def.name, color: def.color || s.color } : s;
+                });
+                setSpecialties(updated);
+                localStorage.setItem('takwin_specialties_db', JSON.stringify(updated));
+            } catch(e) {}
+        }
 
         const savedGrades = localStorage.getItem('takwin_grades_db');
         if (savedGrades) try { setGrades(JSON.parse(savedGrades)); } catch(e) {}
@@ -69,6 +106,9 @@ const EvaluationManager: React.FC = () => {
 
         const savedAssignments = localStorage.getItem('takwin_assignments');
         if (savedAssignments) try { setAssignments(JSON.parse(savedAssignments)); } catch(e) {}
+
+        const savedReceipts = localStorage.getItem('takwin_marks_receipts_db');
+        if (savedReceipts) try { setReceipts(JSON.parse(savedReceipts)); } catch(e) {}
 
         const inst = JSON.parse(localStorage.getItem('takwin_institution_db') || '{}');
         if (inst.director) setCommitteeMembers(prev => ({ ...prev, director: inst.director }));
@@ -90,15 +130,17 @@ const EvaluationManager: React.FC = () => {
 
         setGrades(prev => {
             const traineeGrades = prev[traineeId] || { modules: {} };
+            const modulesObj = traineeGrades.modules || {};
             
+            let updated: EvaluationDatabase;
             if (type === 'module') {
-                const moduleGrades = traineeGrades.modules[selectedModuleId] || {};
-                return {
+                const moduleGrades = modulesObj[selectedModuleId] || {};
+                updated = {
                     ...prev,
                     [traineeId]: {
                         ...traineeGrades,
                         modules: {
-                            ...traineeGrades.modules,
+                            ...modulesObj,
                             [selectedModuleId]: {
                                 ...moduleGrades,
                                 [selectedTerm]: valToSave
@@ -107,14 +149,17 @@ const EvaluationManager: React.FC = () => {
                     }
                 };
             } else {
-                return {
+                updated = {
                     ...prev,
                     [traineeId]: {
                         ...traineeGrades,
+                        modules: modulesObj,
                         report: valToSave
                     }
                 };
             }
+            localStorage.setItem('takwin_grades_db', JSON.stringify(updated));
+            return updated;
         });
     };
 
@@ -125,23 +170,40 @@ const EvaluationManager: React.FC = () => {
         let sumWeightedCC = 0;
         let sumWeightedExam = 0;
         let totalCoeff = 0;
+        let activeCoeffCC = 0;
+        let activeCoeffExam = 0;
 
         MODULES.forEach(m => {
             const mGrades = tGrades?.modules?.[m.id];
-            const s1 = mGrades?.s1 || 0;
-            const s2 = mGrades?.s2 || 0;
-            const s3 = mGrades?.s3 || 0;
-            const exam = mGrades?.exam || 0;
-
-            const avgCC = (s1 + s2 + s3) / 3;
             
-            sumWeightedCC += avgCC * m.coefficient;
-            sumWeightedExam += exam * m.coefficient;
+            const hasS1 = mGrades?.s1 !== undefined;
+            const hasS2 = mGrades?.s2 !== undefined;
+            const hasS3 = mGrades?.s3 !== undefined;
+            const hasExam = mGrades?.exam !== undefined;
+
+            let avgCC = 0;
+            let ccCount = 0;
+            let ccSum = 0;
+            if (hasS1) { ccSum += mGrades!.s1!; ccCount++; }
+            if (hasS2) { ccSum += mGrades!.s2!; ccCount++; }
+            if (hasS3) { ccSum += mGrades!.s3!; ccCount++; }
+            
+            if (ccCount > 0) {
+                avgCC = ccSum / ccCount;
+                sumWeightedCC += avgCC * m.coefficient;
+                activeCoeffCC += m.coefficient;
+            }
+
+            if (hasExam) {
+                sumWeightedExam += mGrades!.exam! * m.coefficient;
+                activeCoeffExam += m.coefficient;
+            }
+
             totalCoeff += m.coefficient;
         });
 
-        const globalCC = totalCoeff > 0 ? parseFloat((sumWeightedCC / totalCoeff).toFixed(2)) : 0;
-        const globalExam = totalCoeff > 0 ? parseFloat((sumWeightedExam / totalCoeff).toFixed(2)) : 0;
+        const globalCC = activeCoeffCC > 0 ? parseFloat((sumWeightedCC / activeCoeffCC).toFixed(2)) : 0;
+        const globalExam = activeCoeffExam > 0 ? parseFloat((sumWeightedExam / activeCoeffExam).toFixed(2)) : 0;
         const report = tGrades?.report || 0;
 
         // Formula: (CC*2 + Exam*3 + Report*1) / 6
@@ -269,7 +331,12 @@ const EvaluationManager: React.FC = () => {
 
                 if (id && !isNaN(grade)) {
                     if (grade >= 0 && grade <= 20) {
-                        if (!newGrades[id]) newGrades[id] = { modules: {} };
+                        if (!newGrades[id]) {
+                            newGrades[id] = { modules: {} };
+                        }
+                        if (!newGrades[id].modules) {
+                            newGrades[id].modules = {};
+                        }
                         
                         if (importType === 'module') {
                             if (!newGrades[id].modules[selectedModuleId]) newGrades[id].modules[selectedModuleId] = {};
@@ -313,6 +380,257 @@ const EvaluationManager: React.FC = () => {
             for(let i=1; i<=s.groups; i++) list.push({ value: `${s.id}-${i}`, label: `${s.name} - فوج ${i}` });
         });
         return list;
+    };
+
+    const saveReceipts = (newReceipts: Record<string, { status: 'pending' | 'received', receivedDate?: string, notes?: string }>) => {
+        setReceipts(newReceipts);
+        localStorage.setItem('takwin_marks_receipts_db', JSON.stringify(newReceipts));
+    };
+
+    const getAssignedTrainerName = (moduleId: number, specId: string, groupId: number) => {
+        const groupKey = `${specId}-${groupId}`;
+        const assignment = assignments.find(a => a.moduleId === moduleId && a.groupId === groupKey);
+        if (assignment) {
+            const conf = trainerConfig[moduleId];
+            if (conf && conf.names) {
+                return conf.names[assignment.trainerKey] || 'غير معين';
+            }
+        }
+        return 'غير معين';
+    };
+
+    const getDynamicReceiptRows = () => {
+        const rows: {
+            id: string;
+            specId: string;
+            specName: string;
+            groupId: number;
+            moduleId?: number;
+            moduleTitle?: string;
+            docType: 'cc' | 'exam' | 'report';
+            docTypeLabel: string;
+            trainerName: string;
+            status: 'pending' | 'received';
+            receivedDate: string;
+            notes: string;
+        }[] = [];
+
+        specialties.forEach(spec => {
+            for (let g = 1; g <= spec.groups; g++) {
+                // Modules
+                MODULES.forEach(m => {
+                    const trainerName = getAssignedTrainerName(m.id, spec.id, g);
+
+                    // 1. Continuous Assessment
+                    const ccKey = `${spec.id}-${g}-${m.id}-cc`;
+                    const ccData = receipts[ccKey] || { status: 'pending', receivedDate: '', notes: '' };
+                    rows.push({
+                        id: ccKey,
+                        specId: spec.id,
+                        specName: spec.name,
+                        groupId: g,
+                        moduleId: m.id,
+                        moduleTitle: m.title,
+                        docType: 'cc',
+                        docTypeLabel: 'تقويم مستمر',
+                        trainerName,
+                        status: ccData.status,
+                        receivedDate: ccData.receivedDate || '',
+                        notes: ccData.notes || ''
+                    });
+
+                    // 2. Exam
+                    const examKey = `${spec.id}-${g}-${m.id}-exam`;
+                    const examData = receipts[examKey] || { status: 'pending', receivedDate: '', notes: '' };
+                    rows.push({
+                        id: examKey,
+                        specId: spec.id,
+                        specName: spec.name,
+                        groupId: g,
+                        moduleId: m.id,
+                        moduleTitle: m.title,
+                        docType: 'exam',
+                        docTypeLabel: 'امتحان نهائي',
+                        trainerName,
+                        status: examData.status,
+                        receivedDate: examData.receivedDate || '',
+                        notes: examData.notes || ''
+                    });
+                });
+
+                // 3. Final Report
+                const reportKey = `${spec.id}-${g}-report`;
+                const reportData = receipts[reportKey] || { status: 'pending', receivedDate: '', notes: '' };
+                rows.push({
+                    id: reportKey,
+                    specId: spec.id,
+                    specName: spec.name,
+                    groupId: g,
+                    docType: 'report',
+                    docTypeLabel: 'تقرير نهاية التربص',
+                    trainerName: 'لجنة التقييم',
+                    status: reportData.status,
+                    receivedDate: reportData.receivedDate || '',
+                    notes: reportData.notes || ''
+                });
+            }
+        });
+
+        return rows;
+    };
+
+    const getFilteredReceiptRows = () => {
+        return getDynamicReceiptRows().filter(row => {
+            const specMatch = receiptFilterSpec === 'all' || row.specId === receiptFilterSpec;
+            const moduleMatch = receiptFilterModule === 'all' || (row.moduleId !== undefined && String(row.moduleId) === receiptFilterModule);
+            const typeMatch = receiptFilterType === 'all' || row.docType === receiptFilterType;
+            const statusMatch = receiptFilterStatus === 'all' || row.status === receiptFilterStatus;
+            return specMatch && moduleMatch && typeMatch && statusMatch;
+        });
+    };
+
+    const handlePrintManualSheet = (scope: 'current' | 'all') => {
+        let sheetsToPrint: typeof manualPrintData = [];
+
+        const getSheetObject = (specId: string, g: number, traineesList: Trainee[]) => {
+            const specName = specialties.find(s => s.id === specId)?.name || '';
+            const mod = MODULES.find(m => m.id === selectedModuleId);
+            const trainer = getAssignedTrainerName(selectedModuleId, specId, g);
+            const termLabel = selectedTerm === 's1' ? 'الدورة الأولى' :
+                              selectedTerm === 's2' ? 'الدورة الثانية' :
+                              selectedTerm === 's3' ? 'الدورة الثالثة' : 'الامتحان النهائي';
+            return {
+                groupName: `فوج ${g}`,
+                specialtyName: specName,
+                moduleTitle: mod?.title || '',
+                teacherName: trainer || 'غير معين',
+                term: selectedTerm,
+                termLabel: termLabel,
+                list: traineesList
+            };
+        };
+
+        if (scope === 'current') {
+            if (selectedSpec === 'all' || selectedGroup === 0) {
+                alert("يرجى تحديد التخصص والفوج الحالي أولاً للطباعة الفردية.");
+                return;
+            }
+            const filtered = getFilteredTrainees();
+            sheetsToPrint.push(getSheetObject(selectedSpec, selectedGroup, filtered));
+        } else {
+            specialties.forEach(spec => {
+                for (let g = 1; g <= spec.groups; g++) {
+                    const groupTrainees = trainees.filter(t => t.specialtyId === spec.id && t.groupId === g)
+                        .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
+                    
+                    if (groupTrainees.length > 0) {
+                        sheetsToPrint.push(getSheetObject(spec.id, g, groupTrainees));
+                    }
+                }
+            });
+        }
+
+        if (sheetsToPrint.length === 0) {
+            alert("لا توجد بيانات طباعة متوفرة.");
+            return;
+        }
+
+        setManualPrintData(sheetsToPrint);
+
+        setTimeout(() => {
+            const printContent = document.getElementById('manual-print-sheet');
+            let printSection = document.getElementById('print-section');
+            if (!printSection) {
+                printSection = document.createElement('div');
+                printSection.id = 'print-section';
+                document.body.appendChild(printSection);
+            }
+            if (printContent && printSection) {
+                printSection.innerHTML = '';
+                const contentClone = printContent.cloneNode(true) as HTMLElement;
+                contentClone.classList.remove('hidden');
+                printSection.appendChild(contentClone);
+                setTimeout(() => window.print(), 300);
+            }
+        }, 150);
+    };
+
+    const handlePrintReportSheet = (scope: 'current' | 'all') => {
+        let sheetsToPrint: typeof reportPrintData = [];
+
+        const getReportSheetObject = (specId: string, g: number, traineesList: Trainee[]) => {
+            const specName = specialties.find(s => s.id === specId)?.name || '';
+            return {
+                groupName: `فوج ${g}`,
+                specialtyName: specName,
+                teacherName: 'الأستاذ المشرف / المكون المرافق',
+                list: traineesList
+            };
+        };
+
+        if (scope === 'current') {
+            if (!reportGroupFilter) {
+                alert("يرجى تحديد الفوج أولاً للطباعة الفردية.");
+                return;
+            }
+            const [specId, gNum] = reportGroupFilter.split('-');
+            const g = parseInt(gNum);
+            const filtered = trainees.filter(t => t.specialtyId === specId && t.groupId === g)
+                .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
+            sheetsToPrint.push(getReportSheetObject(specId, g, filtered));
+        } else {
+            specialties.forEach(spec => {
+                for (let g = 1; g <= spec.groups; g++) {
+                    const groupTrainees = trainees.filter(t => t.specialtyId === spec.id && t.groupId === g)
+                        .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
+                    
+                    if (groupTrainees.length > 0) {
+                        sheetsToPrint.push(getReportSheetObject(spec.id, g, groupTrainees));
+                    }
+                }
+            });
+        }
+
+        if (sheetsToPrint.length === 0) {
+            alert("لا توجد بيانات طباعة متوفرة.");
+            return;
+        }
+
+        setReportPrintData(sheetsToPrint);
+
+        setTimeout(() => {
+            const printContent = document.getElementById('report-print-sheet');
+            let printSection = document.getElementById('print-section');
+            if (!printSection) {
+                printSection = document.createElement('div');
+                printSection.id = 'print-section';
+                document.body.appendChild(printSection);
+            }
+            if (printContent && printSection) {
+                printSection.innerHTML = '';
+                const contentClone = printContent.cloneNode(true) as HTMLElement;
+                contentClone.classList.remove('hidden');
+                printSection.appendChild(contentClone);
+                setTimeout(() => window.print(), 300);
+            }
+        }, 150);
+    };
+
+    const handlePrintReceiptSheet = () => {
+        const printContent = document.getElementById('receipt-print-sheet');
+        let printSection = document.getElementById('print-section');
+        if (!printSection) {
+            printSection = document.createElement('div');
+            printSection.id = 'print-section';
+            document.body.appendChild(printSection);
+        }
+        if (printContent && printSection) {
+            printSection.innerHTML = '';
+            const contentClone = printContent.cloneNode(true) as HTMLElement;
+            contentClone.classList.remove('hidden');
+            printSection.appendChild(contentClone);
+            setTimeout(() => window.print(), 300);
+        }
     };
 
     // --- PRINT HANDLERS ---
@@ -416,12 +734,19 @@ const EvaluationManager: React.FC = () => {
                             </thead>
                             <tbody>
                                 {MODULES.map(m => {
-                                    const mg = tGrades.modules[m.id] || {};
-                                    const s1 = mg.s1 || 0;
-                                    const s2 = mg.s2 || 0;
-                                    const s3 = mg.s3 || 0;
+                                    const mg = (tGrades.modules || {})[m.id] || {};
+                                    const s1 = mg.s1;
+                                    const s2 = mg.s2;
+                                    const s3 = mg.s3;
                                     const exam = mg.exam || 0;
-                                    const avgCC = parseFloat(((s1+s2+s3)/3).toFixed(2));
+
+                                    let ccSum = 0;
+                                    let ccCount = 0;
+                                    if (s1 !== undefined) { ccSum += s1; ccCount++; }
+                                    if (s2 !== undefined) { ccSum += s2; ccCount++; }
+                                    if (s3 !== undefined) { ccSum += s3; ccCount++; }
+
+                                    const avgCC = ccCount > 0 ? parseFloat((ccSum / ccCount).toFixed(2)) : 0;
                                     const weightedCC = parseFloat((avgCC * m.coefficient).toFixed(2));
                                     const weightedExam = parseFloat((exam * m.coefficient).toFixed(2));
 
@@ -532,6 +857,12 @@ const EvaluationManager: React.FC = () => {
                         >
                             <Award className="w-4 h-4"/> المداولات النهائية
                         </button>
+                        <button
+                            onClick={() => setActiveTab('receipt')}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'receipt' ? 'bg-teal-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <ClipboardList className="w-4 h-4"/> وثيقة استلام النقاط
+                        </button>
                     </div>
                 </div>
             </div>
@@ -543,12 +874,41 @@ const EvaluationManager: React.FC = () => {
                     <div className="lg:col-span-1 space-y-4">
                         <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-700">
                             <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-                                <Settings className="text-blue-400 w-4 h-4" /> إعدادات القوائم
+                                <Settings className="text-blue-400 w-4 h-4" /> إعدادات الحجز والتصفية
                             </h3>
                             
                             <div className="space-y-4">
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-1">1. اختر المقياس</label>
+                                    <label className="text-xs text-slate-300 block mb-1 font-bold">1. اختر التخصص الحالي</label>
+                                    <select 
+                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm"
+                                        value={selectedSpec}
+                                        onChange={e => { setSelectedSpec(e.target.value); setSelectedGroup(0); }}
+                                    >
+                                        <option value="all">كل التخصصات</option>
+                                        {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-slate-300 block mb-1 font-bold">2. اختر الفوج الحالي</label>
+                                    <select 
+                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm"
+                                        value={selectedGroup}
+                                        onChange={e => setSelectedGroup(parseInt(e.target.value))}
+                                    >
+                                        <option value={0}>كل الأفواج (عرض الكل)</option>
+                                        {selectedSpec !== 'all' && Array.from({length: specialties.find(s=>s.id === selectedSpec)?.groups || 0}).map((_, i) => (
+                                            <option key={i+1} value={i+1}>فوج {i+1}</option>
+                                        ))}
+                                    </select>
+                                    {selectedSpec === 'all' && (
+                                        <p className="text-[10px] text-amber-400 mt-1">⚠️ حدد تخصصاً معيناً لتمكين اختيار الأفواج الفردية</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-slate-300 block mb-1 font-bold">3. اختر المقياس</label>
                                     <select 
                                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm"
                                         value={selectedModuleId}
@@ -559,81 +919,60 @@ const EvaluationManager: React.FC = () => {
                                 </div>
 
                                 <div>
-                                    <label className="text-xs text-slate-400 block mb-1">2. نوع النقطة (للحجز)</label>
+                                    <label className="text-xs text-slate-300 block mb-1 font-bold">4. نوع العلامة (للحجز)</label>
                                     <div className="grid grid-cols-2 gap-2">
                                         {['s1', 's2', 's3'].map(s => (
                                             <button 
                                                 key={s}
                                                 onClick={() => setSelectedTerm(s as any)}
-                                                className={`py-2 rounded text-xs font-bold border ${selectedTerm === s ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+                                                className={`py-2 rounded text-xs font-bold border transition-all ${selectedTerm === s ? 'bg-blue-600 border-blue-500 text-white shadow' : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white'}`}
                                             >
                                                 دورة {s.replace('s','')}
                                             </button>
                                         ))}
                                         <button 
                                             onClick={() => setSelectedTerm('exam')}
-                                            className={`py-2 rounded text-xs font-bold border ${selectedTerm === 'exam' ? 'bg-purple-600 border-purple-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+                                            className={`py-2 rounded text-xs font-bold border transition-all ${selectedTerm === 'exam' ? 'bg-purple-600 border-purple-500 text-white shadow' : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white'}`}
                                         >
-                                            الامتحان
+                                            الامتحان النهائي
                                         </button>
                                     </div>
                                 </div>
 
-                                <div className="border-t border-slate-700 pt-4 mt-2 bg-slate-800/80 p-3 rounded-lg border">
+                                <div className="border-t border-slate-700 pt-4 mt-2 bg-slate-800/80 p-3 rounded-lg border border-blue-500/30">
                                     <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                                        <FileSpreadsheet className="w-3 h-3 text-emerald-400" />
-                                        نظام الاستيراد (موصى به)
+                                        <Printer className="w-3 h-3 text-blue-400" />
+                                        طباعة قوائم التنقيط الورقية (PDF)
                                     </h4>
                                     
-                                    <label className="text-[10px] text-slate-400 block mb-1">تحديد الأستاذ (اختياري - للطباعة)</label>
-                                    <select 
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs mb-2"
-                                        value={selectedTrainerExport}
-                                        onChange={e => setSelectedTrainerExport(e.target.value)}
-                                    >
-                                        <option value="">-- تصدير القائمة العامة --</option>
-                                        {getTrainersForDropdown().map(opt => (
-                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                        ))}
-                                    </select>
-
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">
+                                        قم بطباعة قائمة رسمية فارغة لتسليمها للأستاذ قصد ملئها يدوياً وعرضها في الجدول لتسهيل الحجز المباشر.
+                                    </p>
+ 
+                                    <div className="space-y-2">
                                         <button 
-                                            onClick={handleSmartExport}
-                                            className="flex items-center justify-center gap-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded text-xs font-bold transition-colors border border-slate-600"
+                                            onClick={() => handlePrintManualSheet('current')}
+                                            className={`w-full flex items-center justify-center gap-1.5 py-2 rounded text-xs font-bold transition-all shadow-md ${
+                                                selectedSpec === 'all' || selectedGroup === 0 
+                                                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700/50' 
+                                                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                            }`}
+                                            disabled={selectedSpec === 'all' || selectedGroup === 0}
                                         >
-                                            <Download className="w-3 h-3" /> تحميل القائمة
+                                            <Printer className="w-3.5 h-3.5" /> طباعة للفوج المحدد
                                         </button>
                                         <button 
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white py-2 rounded text-xs font-bold transition-colors shadow-md"
+                                            onClick={() => handlePrintManualSheet('all')}
+                                            className="w-full flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded text-xs font-bold transition-all border border-slate-600"
                                         >
-                                            <FileUp className="w-3 h-3" /> رفع النقاط
+                                            <Printer className="w-3.5 h-3.5" /> طباعة لجميع التخصصات والأفواج
                                         </button>
                                     </div>
-                                    <input type="file" ref={fileInputRef} onChange={(e) => handleImportCSV(e, 'module')} className="hidden" accept=".csv" />
-                                </div>
-
-                                <div className="border-t border-slate-700 pt-4 mt-2">
-                                    <label className="text-xs text-slate-400 block mb-1">تصفية العرض في الجدول</label>
-                                    <select 
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm mb-2"
-                                        value={selectedSpec}
-                                        onChange={e => { setSelectedSpec(e.target.value); setSelectedGroup(0); }}
-                                    >
-                                        <option value="all">كل التخصصات</option>
-                                        {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                    </select>
-                                    <select 
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm"
-                                        value={selectedGroup}
-                                        onChange={e => setSelectedGroup(parseInt(e.target.value))}
-                                    >
-                                        <option value={0}>كل الأفواج</option>
-                                        {selectedSpec !== 'all' && Array.from({length: specialties.find(s=>s.id === selectedSpec)?.groups || 0}).map((_, i) => (
-                                            <option key={i+1} value={i+1}>فوج {i+1}</option>
-                                        ))}
-                                    </select>
+                                    {(selectedSpec === 'all' || selectedGroup === 0) && (
+                                        <p className="text-[10px] text-amber-500 mt-2 text-center leading-relaxed">
+                                            💡 اختر تخصصاً وفوجاً بالأعلى لتمكين طباعة الفوج المحدد.
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -679,36 +1018,17 @@ const EvaluationManager: React.FC = () => {
                                                     <td className="p-3 text-slate-400">
                                                         <span className="bg-slate-800 px-2 py-0.5 rounded text-xs">فوج {t.groupId}</span>
                                                     </td>
-                                                    <td className="p-3 text-center flex justify-center items-center gap-2">
-                                                        {isEditing ? (
-                                                            <input 
-                                                                type="number" 
-                                                                min="0" max="20" step="0.5"
-                                                                autoFocus
-                                                                onBlur={() => setEditingCell(null)}
-                                                                className={`w-20 text-center font-bold text-black rounded p-1 focus:ring-2 focus:ring-blue-500 outline-none ${
-                                                                    val === undefined ? 'bg-white' : (val < 10 ? 'bg-red-100 text-red-700' : 'bg-green-50 text-green-800')
-                                                                }`}
-                                                                value={val === undefined ? '' : val}
-                                                                onChange={e => handleGradeChange(t.id, e.target.value, 'module')}
-                                                                placeholder="-"
-                                                            />
-                                                        ) : (
-                                                            <div className="flex items-center gap-2">
-                                                                <span className={`w-16 text-center font-bold text-lg ${
-                                                                    val === undefined ? 'text-slate-600' : (val < 10 ? 'text-red-400' : 'text-emerald-400')
-                                                                }`}>
-                                                                    {val ?? '-'}
-                                                                </span>
-                                                                <button 
-                                                                    onClick={() => setEditingCell(cellKey)}
-                                                                    className="text-slate-600 hover:text-blue-400 transition-colors opacity-0 group-hover:opacity-100"
-                                                                    title="تعديل يدوي"
-                                                                >
-                                                                    <Edit2 className="w-3 h-3" />
-                                                                </button>
-                                                            </div>
-                                                        )}
+                                                    <td className="p-3 text-center flex justify-center items-center">
+                                                        <input 
+                                                            type="number" 
+                                                            min="0" max="20" step="0.1"
+                                                            className={`w-24 text-center font-bold text-black rounded-lg p-1.5 border border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
+                                                                val === undefined ? 'bg-slate-100' : (val < 10 ? 'bg-red-100 text-red-800 border-red-400' : 'bg-emerald-50 text-emerald-900 border-emerald-400')
+                                                            }`}
+                                                            value={val === undefined ? '' : val}
+                                                            onChange={e => handleGradeChange(t.id, e.target.value, 'module')}
+                                                            placeholder="-"
+                                                        />
                                                     </td>
                                                 </tr>
                                             );
@@ -739,49 +1059,69 @@ const EvaluationManager: React.FC = () => {
                             
                             <div className="space-y-4">
                                 {/* REPORT IMPORT SECTION */}
-                                <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-600">
+                                <div className="bg-slate-800/80 p-3 rounded-lg border border-amber-500/30">
                                     <h4 className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                                        <FileText className="w-3 h-3 text-amber-400" />
-                                        تقييم التقرير النهائي (المذكرة)
+                                        <Printer className="text-amber-400 w-3 h-3" />
+                                        طباعة وثيقة تقييم التقارير الرسمية
                                     </h4>
                                     
-                                    <label className="text-[10px] text-slate-400 block mb-1">اختر الفوج لاستخراج القائمة</label>
+                                    <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">
+                                        قم بطباعة وثيقة رسمية لتقييم المذكرة/التقرير النهائي من طرف لجنة التقييم يدوياً ثم حجز العلامات بالجدول.
+                                    </p>
+
+                                    <label className="text-[10px] text-slate-400 block mb-1">تحديد الفوج للطباعة الفردية</label>
                                     <select 
-                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs mb-2"
+                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs mb-3"
                                         value={reportGroupFilter}
                                         onChange={e => setReportGroupFilter(e.target.value)}
                                     >
-                                        <option value="">-- كل الأفواج --</option>
+                                        <option value="">-- اختر الفوج --</option>
                                         {getAllGroupsList().map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
                                     </select>
 
-                                    <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-2">
                                         <button 
-                                            onClick={handleReportExport}
-                                            className="flex items-center justify-center gap-1 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded text-xs font-bold transition-colors border border-slate-600"
+                                            onClick={() => handlePrintReportSheet('current')}
+                                            className="w-full flex items-center justify-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white py-2 rounded text-xs font-bold transition-colors shadow-md"
                                         >
-                                            <Download className="w-3 h-3" /> قائمة التنقيط
+                                            <Printer className="w-3.5 h-3.5" /> طباعة للفوج المحدد
                                         </button>
                                         <button 
-                                            onClick={() => reportInputRef.current?.click()}
-                                            className="flex items-center justify-center gap-1 bg-amber-700 hover:bg-amber-600 text-white py-2 rounded text-xs font-bold transition-colors"
+                                            onClick={() => handlePrintReportSheet('all')}
+                                            className="w-full flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white py-2 rounded text-xs font-bold transition-colors border border-slate-600"
                                         >
-                                            <FileUp className="w-3 h-3" /> رفع العلامات
+                                            <Printer className="w-3.5 h-3.5" /> طباعة لجميع التخصصات والأفواج
                                         </button>
                                     </div>
-                                    <input type="file" ref={reportInputRef} onChange={(e) => handleImportCSV(e, 'report')} className="hidden" accept=".csv" />
                                 </div>
 
                                 <div className="pt-2 border-t border-slate-700">
-                                    <label className="text-xs text-slate-400 block mb-1">تصفية العرض حسب التخصص</label>
+                                    <label className="text-xs text-slate-400 block mb-1 font-bold">تصفية العرض حسب التخصص</label>
                                     <select 
                                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm"
                                         value={selectedSpec}
                                         onChange={e => { setSelectedSpec(e.target.value); setSelectedGroup(0); }}
                                     >
-                                        <option value="all">الكل</option>
+                                        <option value="all">كل التخصصات</option>
                                         {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                     </select>
+                                </div>
+
+                                <div className="pt-2">
+                                    <label className="text-xs text-slate-400 block mb-1 font-bold">الفوج الحالي</label>
+                                    <select 
+                                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-sm"
+                                        value={selectedGroup}
+                                        onChange={e => setSelectedGroup(parseInt(e.target.value))}
+                                    >
+                                        <option value={0}>كل الأفواج (عرض الكل)</option>
+                                        {selectedSpec !== 'all' && Array.from({length: specialties.find(s=>s.id === selectedSpec)?.groups || 0}).map((_, i) => (
+                                            <option key={i+1} value={i+1}>فوج {i+1}</option>
+                                        ))}
+                                    </select>
+                                    {selectedSpec === 'all' && (
+                                        <p className="text-[10px] text-amber-400 mt-1">⚠️ حدد تخصصاً معيناً لتفعيل تصفية الفوج</p>
+                                    )}
                                 </div>
 
                                 {/* PV Details (Collapsed slightly) */}
@@ -841,28 +1181,16 @@ const EvaluationManager: React.FC = () => {
                                                     <td className="p-3 font-bold text-white">{t.surname} {t.name}</td>
                                                     <td className="p-3 text-center text-blue-200">{globalCC}</td>
                                                     <td className="p-3 text-center text-purple-200">{globalExam}</td>
-                                                    <td className="p-3 text-center bg-slate-900/50">
-                                                        {isEditing ? (
-                                                            <input 
-                                                                type="number" min="0" max="20"
-                                                                autoFocus
-                                                                onBlur={() => setEditingCell(null)}
-                                                                className="w-16 bg-slate-800 border border-slate-600 rounded text-center text-amber-400 font-bold focus:ring-1 focus:ring-amber-500 outline-none"
-                                                                value={grades[t.id]?.report ?? ''}
-                                                                onChange={e => handleGradeChange(t.id, e.target.value, 'report')}
-                                                                placeholder="-"
-                                                            />
-                                                        ) : (
-                                                            <div className="flex items-center justify-center gap-1">
-                                                                <span className="font-bold text-amber-400">{report}</span>
-                                                                <button 
-                                                                    onClick={() => setEditingCell(cellKey)}
-                                                                    className="text-slate-600 hover:text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                >
-                                                                    <Edit2 className="w-3 h-3"/>
-                                                                </button>
-                                                            </div>
-                                                        )}
+                                                    <td className="p-3 text-center bg-slate-900/50 flex justify-center items-center">
+                                                        <input 
+                                                            type="number" min="0" max="20" step="0.1"
+                                                            className={`w-20 text-center font-bold text-black rounded-lg p-1.5 border border-slate-700 focus:ring-2 focus:ring-amber-500 outline-none transition-all ${
+                                                                report === 0 ? 'bg-slate-100' : (report < 10 ? 'bg-red-100 text-red-800 border-red-400' : 'bg-amber-50 text-amber-900 border-amber-400')
+                                                            }`}
+                                                            value={grades[t.id]?.report ?? ''}
+                                                            onChange={e => handleGradeChange(t.id, e.target.value, 'report')}
+                                                            placeholder="-"
+                                                        />
                                                     </td>
                                                     <td className="p-3 text-center bg-slate-800 font-black text-white text-lg">{finalAvg}</td>
                                                     <td className="p-3 text-center">
@@ -889,9 +1217,163 @@ const EvaluationManager: React.FC = () => {
                 </div>
             )}
 
+            {/* TAB 4: RECEIPT */}
+            {activeTab === 'receipt' && (
+                <div className="space-y-6 print:hidden">
+                    {/* Filters block */}
+                    <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+                            <h3 className="text-white font-bold flex items-center gap-2">
+                                <ClipboardList className="text-teal-400 w-5 h-5" />
+                                وثيقة متابعة استلام قوائم الحجز والنقاط
+                            </h3>
+                            <button 
+                                onClick={handlePrintReceiptSheet} 
+                                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-bold transition-colors shadow-lg"
+                            >
+                                <Printer className="w-4 h-4" /> طباعة جدول الاستلام الحالي
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label className="text-xs text-slate-400 block mb-1">تصفية التخصص</label>
+                                <select className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs" value={receiptFilterSpec} onChange={e=>setReceiptFilterSpec(e.target.value)}>
+                                    <option value="all">كل التخصصات</option>
+                                    {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 block mb-1">تصفية المقياس</label>
+                                <select className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs" value={receiptFilterModule} onChange={e=>setReceiptFilterModule(e.target.value)}>
+                                    <option value="all">كل المقاييس</option>
+                                    {MODULES.map(m => <option key={m.id} value={String(m.id)}>{m.title}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 block mb-1">نوع الوثيقة</label>
+                                <select className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs" value={receiptFilterType} onChange={e=>setReceiptFilterType(e.target.value)}>
+                                    <option value="all">كل الأنواع</option>
+                                    <option value="cc">تقويم مستمر</option>
+                                    <option value="exam">امتحان نهائي</option>
+                                    <option value="report">تقرير نهاية التربص</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 block mb-1">حالة الاستلام</label>
+                                <select className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white text-xs" value={receiptFilterStatus} onChange={e=>setReceiptFilterStatus(e.target.value)}>
+                                    <option value="all">الكل</option>
+                                    <option value="pending">لم يتم الاستلام</option>
+                                    <option value="received">تم الاستلام</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Table block */}
+                    <div className="bg-slate-900/80 rounded-2xl border border-slate-800 overflow-hidden">
+                        <div className="p-4 bg-slate-950/20 border-b border-slate-800 flex justify-between items-center">
+                            <span className="text-xs text-slate-400">العدد المصفى: {getFilteredReceiptRows().length} وثيقة</span>
+                        </div>
+                        <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
+                            <table className="w-full text-right text-sm">
+                                <thead className="bg-slate-950 text-slate-400 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="p-3 w-12">#</th>
+                                        <th className="p-3">التخصص / الفوج</th>
+                                        <th className="p-3">المقياس / المادة</th>
+                                        <th className="p-3 w-36">الأستاذ</th>
+                                        <th className="p-3 w-40">نوع الوثيقة</th>
+                                        <th className="p-3 w-32 text-center">حالة الاستلام</th>
+                                        <th className="p-3 w-40 text-center">تاريخ التسليم</th>
+                                        <th className="p-3">ملاحظات التدوين</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800">
+                                    {getFilteredReceiptRows().map((row, idx) => {
+                                        const isReceived = row.status === 'received';
+                                        return (
+                                            <tr key={row.id} className="hover:bg-slate-800/30">
+                                                <td className="p-3 text-slate-500">{idx+1}</td>
+                                                <td className="p-3 font-bold text-white">
+                                                    {row.specName} <span className="text-teal-400 text-xs px-1.5 py-0.5 rounded bg-slate-800">ف{row.groupId}</span>
+                                                </td>
+                                                <td className="p-3 text-slate-300">{row.moduleTitle || '-'}</td>
+                                                <td className="p-3 text-slate-400 font-medium">{row.trainerName}</td>
+                                                <td className="p-3 text-teal-300 font-bold">{row.docTypeLabel}</td>
+                                                <td className="p-3 text-center">
+                                                    <button 
+                                                        onClick={() => {
+                                                            const newReceipts = { ...receipts };
+                                                            const current = newReceipts[row.id] || { status: 'pending', receivedDate: '', notes: '' };
+                                                            const targetStatus = current.status === 'received' ? 'pending' : 'received';
+                                                            const targetDate = targetStatus === 'received' ? new Date().toLocaleDateString('fr-FR') : '';
+                                                            newReceipts[row.id] = {
+                                                                ...current,
+                                                                status: targetStatus,
+                                                                receivedDate: targetDate
+                                                            };
+                                                            saveReceipts(newReceipts);
+                                                        }}
+                                                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+                                                            isReceived 
+                                                                ? 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/20' 
+                                                                : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                                                        }`}
+                                                    >
+                                                        {isReceived ? '✓ تم الاستلام' : '✗ معلق'}
+                                                    </button>
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    <input 
+                                                        type="text" 
+                                                        className="bg-slate-950 border border-slate-800 rounded p-1 text-xs text-white text-center w-28 outline-none focus:border-teal-500"
+                                                        value={row.receivedDate}
+                                                        onChange={e => {
+                                                            const newReceipts = { ...receipts };
+                                                            const current = newReceipts[row.id] || { status: 'pending', receivedDate: '', notes: '' };
+                                                            newReceipts[row.id] = {
+                                                                ...current,
+                                                                receivedDate: e.target.value
+                                                            };
+                                                            saveReceipts(newReceipts);
+                                                        }}
+                                                        placeholder="--/--/----"
+                                                    />
+                                                </td>
+                                                <td className="p-3">
+                                                    <input 
+                                                        type="text" 
+                                                        className="bg-slate-950 border border-slate-800 rounded p-1 text-xs text-white w-full outline-none focus:border-teal-500 text-right"
+                                                        value={row.notes}
+                                                        onChange={e => {
+                                                            const newReceipts = { ...receipts };
+                                                            const current = newReceipts[row.id] || { status: 'pending', receivedDate: '', notes: '' };
+                                                            newReceipts[row.id] = {
+                                                                ...current,
+                                                                notes: e.target.value
+                                                            };
+                                                            saveReceipts(newReceipts);
+                                                        }}
+                                                        placeholder="اكتب ملاحظة..."
+                                                    />
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {getFilteredReceiptRows().length === 0 && (
+                                        <tr><td colSpan={8} className="p-8 text-center text-slate-500">لا توجد بيانات تطابق الفلاتر</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* HIDDEN PRINT TEMPLATE - PV (Ensured Hidden) */}
             <div className="hidden">
-                <div id="deliberation-pv" className="p-8 bg-white text-black font-serif text-justify" style={{ direction: 'rtl' }}>
+                <div id="deliberation-pv" className="p-8 bg-white text-black font-sans text-justify" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
                     {/* Header */}
                     <div className="text-center mb-4">
                         <h3 className="font-bold text-lg">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
@@ -1027,6 +1509,218 @@ const EvaluationManager: React.FC = () => {
                                  <p className="text-sm text-gray-500">(الختم والتوقيع)</p>
                              </div>
                          </div>
+                    </div>
+                </div>
+
+                {/* 1. MANUAL MARKS SHEETS (CA/EXAMS) */}
+                <div id="manual-print-sheet" className="p-8 bg-white text-black font-sans text-justify" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
+                    {manualPrintData.map((sheet, index) => (
+                        <div key={index} className="mb-12" style={{ pageBreakAfter: index < manualPrintData.length - 1 ? 'always' : 'auto' }}>
+                            {/* Headings */}
+                            <div className="text-center mb-6">
+                                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                                <div className="flex justify-between mt-2 text-xs font-bold px-4 w-full border-t border-gray-300 pt-2">
+                                    <span>مديرية التربية لولاية: {institution.wilaya}</span>
+                                    <span>مركز إجراء التكوين: {institution.center}</span>
+                                </div>
+                            </div>
+
+                            {/* Title Block */}
+                            <div className="text-center mb-6 border border-black p-2 bg-gray-50 rounded">
+                                <h2 className="text-lg font-black underline">
+                                    {sheet.term === 'exam' ? 'علامات الامتحان النهائي' : `علامات المراقبة المستمرة - ${sheet.termLabel}`}
+                                </h2>
+                            </div>
+
+                            {/* Metadata */}
+                            <div className="grid grid-cols-2 gap-3 text-xs font-bold border border-black p-3 mb-6 bg-white rounded">
+                                <div>التخصص: <span className="font-normal underline">{sheet.specialtyName}</span></div>
+                                <div>الفوج: <span className="font-normal underline">{sheet.groupName}</span></div>
+                                <div>المقياس: <span className="font-normal underline">{sheet.moduleTitle}</span></div>
+                                <div>الأستاذ المكون: <span className="font-normal underline">{sheet.teacherName}</span></div>
+                            </div>
+
+                            {/* Trainees List Table */}
+                            <table className="w-full border-collapse border border-black text-center text-xs mb-8">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="border border-black p-2 w-12">الرقم</th>
+                                        <th className="border border-black p-2 text-right px-4">اسم و لقب المتكون</th>
+                                        <th className="border border-black p-2 w-32">تاريخ الميلاد</th>
+                                        <th className="border border-black p-2 w-40">العلامة / 20</th>
+                                        <th className="border border-black p-2">الملاحظات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sheet.list.map((trainee, tIdx) => (
+                                        <tr key={trainee.id} className="h-9">
+                                            <td className="border border-black p-2">{tIdx + 1}</td>
+                                            <td className="border border-black p-2 text-right font-bold px-4">{trainee.surname} {trainee.name}</td>
+                                            <td className="border border-black p-2">{trainee.dob}</td>
+                                            <td className="border border-black p-2 text-gray-400">............... / 20</td>
+                                            <td className="border border-black p-2"></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+
+                            {/* Signatures Footer */}
+                            <div className="grid grid-cols-2 gap-8 mt-12 text-xs font-bold">
+                                <div className="text-center">
+                                    <p className="mb-12 underline">توقيع الأستاذ المكون:</p>
+                                    <p className="text-gray-400">...............................</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="mb-12 underline">إمضاء وختم المدير البيداغوجي:</p>
+                                    <p className="text-gray-400">...............................</p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* 2. REPORT EVALUATION SHEETS */}
+                <div id="report-print-sheet" className="p-8 bg-white text-black font-sans text-justify" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
+                    {reportPrintData.map((sheet, index) => (
+                        <div key={index} className="mb-12" style={{ pageBreakAfter: index < reportPrintData.length - 1 ? 'always' : 'auto' }}>
+                            {/* Headings */}
+                            <div className="text-center mb-6">
+                                <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                                <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                                <div className="flex justify-between mt-2 text-xs font-bold px-4 w-full border-t border-gray-300 pt-2">
+                                    <span>مديرية التربية لولاية: {institution.wilaya}</span>
+                                    <span>مركز إجراء التكوين: {institution.center}</span>
+                                </div>
+                            </div>
+
+                            {/* Title Block */}
+                            <div className="text-center mb-6 border border-black p-2 bg-gray-50 rounded">
+                                <h2 className="text-lg font-black underline">
+                                    علامات تقييم تقرير نهاية التربص
+                                </h2>
+                            </div>
+
+                            {/* Metadata */}
+                            <div className="grid grid-cols-2 gap-3 text-xs font-bold border border-black p-3 mb-6 bg-white rounded">
+                                <div>التخصص: <span className="font-normal underline">{sheet.specialtyName}</span></div>
+                                <div>الفوج: <span className="font-normal underline">{sheet.groupName}</span></div>
+                                <div className="col-span-2">الأستاذ المكون: <span className="font-normal underline">{sheet.teacherName}</span></div>
+                            </div>
+
+                            {/* Trainees List Table */}
+                            <table className="w-full border-collapse border border-black text-center text-xs mb-8">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="border border-black p-2 w-12">الرقم</th>
+                                        <th className="border border-black p-2 text-right px-4">اسم و لقب المتكون</th>
+                                        <th className="border border-black p-2 w-32">تاريخ الميلاد</th>
+                                        <th className="border border-black p-2 w-40">العلامة / 20</th>
+                                        <th className="border border-black p-2">الملاحظات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sheet.list.map((trainee, tIdx) => (
+                                        <tr key={trainee.id} className="h-9">
+                                            <td className="border border-black p-2">{tIdx + 1}</td>
+                                            <td className="border border-black p-2 text-right font-bold px-4">{trainee.surname} {trainee.name}</td>
+                                            <td className="border border-black p-2">{trainee.dob}</td>
+                                            <td className="border border-black p-2 text-gray-400">............... / 20</td>
+                                            <td className="border border-black p-2"></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+
+                            {/* Signatures Footer */}
+                            <div className="grid grid-cols-3 gap-4 mt-12 text-xs font-bold">
+                                <div className="text-center">
+                                    <p className="mb-12 underline">رئيس لجنة التقييم:</p>
+                                    <p className="text-gray-400">...............................</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="mb-12 underline">العضو المقيم:</p>
+                                    <p className="text-gray-400">...............................</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="mb-12 underline">المدير البيداغوجي:</p>
+                                    <p className="text-gray-400">...............................</p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* 3. DOCUMENT RECEIPTS STATUS LISTS */}
+                <div id="receipt-print-sheet" className="p-8 bg-white text-black font-sans text-justify" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
+                    {/* Headings */}
+                    <div className="text-center mb-6">
+                        <h3 className="font-bold text-base">الجمهورية الجزائرية الديمقراطية الشعبية</h3>
+                        <h3 className="font-bold text-base">وزارة التربية الوطنية</h3>
+                        <div className="flex justify-between mt-2 text-xs font-bold px-4 w-full border-t border-gray-300 pt-2">
+                            <span>مديرية التربية لولاية: {institution.wilaya}</span>
+                            <span>مركز إجراء التكوين: {institution.center}</span>
+                        </div>
+                    </div>
+
+                    {/* Title Block */}
+                    <div className="text-center mb-6 border-2 border-black p-3 rounded">
+                        <h2 className="text-lg font-black underline decoration-double">
+                            {receiptFilterType === 'cc' ? "جدول متابعة واستلام علامات التقويم المستمر" :
+                             receiptFilterType === 'exam' ? "جدول متابعة واستلام علامات الامتحان النهائي" :
+                             receiptFilterType === 'report' ? "جدول متابعة واستلام تقييم تقرير نهاية التربص" :
+                             "جدول متابعة واستلام كشوف النقاط وعلامات التقييم"}
+                        </h2>
+                        <p className="text-xs font-bold mt-1">تاريخ استخراج الوثيقة: {new Date().toLocaleDateString('fr-FR')}</p>
+                    </div>
+
+                    {/* Receipts Table */}
+                    <table className="w-full border-collapse border border-black text-center text-xs mb-8">
+                        <thead className="bg-gray-100 font-bold">
+                            <tr>
+                                <th className="border border-black p-2 w-10">#</th>
+                                <th className="border border-black p-2 text-right px-4">الأستاذ المكون</th>
+                                <th className="border border-black p-2 text-right px-4">المقياس / المادة</th>
+                                <th className="border border-black p-2">التخصص والفرع / الفوج</th>
+                                <th className="border border-black p-2 w-28">نوع الوثيقة</th>
+                                <th className="border border-black p-2 w-24">الحالة بالمنصة</th>
+                                <th className="border border-black p-2 w-24">تأشيرة الاستلام اليدوي (*)</th>
+                                <th className="border border-black p-2 w-28">تاريخ التسليم</th>
+                                <th className="border border-black p-2">توقيع المستلم / ملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {getFilteredReceiptRows().map((row, idx) => (
+                                <tr key={row.id}>
+                                    <td className="border border-black p-2">{idx + 1}</td>
+                                    <td className="border border-black p-2 text-right font-bold px-4">{row.trainerName}</td>
+                                    <td className="border border-black p-2 text-right px-4">{row.moduleTitle || '-'}</td>
+                                    <td className="border border-black p-2 font-bold">{row.specName} (فوج {row.groupId})</td>
+                                    <td className="border border-black p-2">{row.docTypeLabel}</td>
+                                    <td className="border border-black p-2 font-bold">
+                                        {row.status === 'received' ? '✓ تم الاستلام' : '✗ معلق'}
+                                    </td>
+                                    <td className="border border-black p-2 font-mono text-center">
+                                        {row.status === 'received' ? '[ * ]' : '[   ]'}
+                                    </td>
+                                    <td className="border border-black p-2 font-mono">{row.receivedDate || '........'}</td>
+                                    <td className="border border-black p-2 text-right px-2">{row.notes || ''}</td>
+                                </tr>
+                            ))}
+                            {getFilteredReceiptRows().length === 0 && (
+                                <tr>
+                                    <td colSpan={9} className="border border-black p-6 text-center font-bold text-gray-500">
+                                        لا توجد بيانات تطابق الفلاتر المحددة حالياً.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+
+                    {/* Footer */}
+                    <div className="text-left mt-8 text-xs font-bold pl-12">
+                        <p className="underline mb-8">إمضاء وختم مصلحة المتابعة والتقييم البيداغوجي:</p>
+                        <p className="text-gray-400">.....................................................</p>
                     </div>
                 </div>
             </div>

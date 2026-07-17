@@ -86,7 +86,23 @@ const DataAnalytics: React.FC = () => {
       load('takwin_trainees_db', setTrainees);
       load('takwin_attendance_db', setAttendance);
       load('takwin_grades_db', setGrades);
-      load('takwin_specialties_db', setSpecialties);
+      
+      const savedSpec = localStorage.getItem('takwin_specialties_db');
+      if (savedSpec) {
+          try {
+              const parsed: Specialty[] = JSON.parse(savedSpec);
+              const updated = parsed.map(s => {
+                  const def = DEFAULT_SPECIALTIES.find(d => d.id === s.id);
+                  return def ? { ...s, name: def.name, color: def.color || s.color } : s;
+              });
+              setSpecialties(updated);
+              localStorage.setItem('takwin_specialties_db', JSON.stringify(updated));
+          } catch(e) {
+              load('takwin_specialties_db', setSpecialties);
+          }
+      } else {
+          load('takwin_specialties_db', setSpecialties);
+      }
   }, []);
 
   // --- ADVANCED ANALYTICS ENGINE ---
@@ -113,7 +129,8 @@ const DataAnalytics: React.FC = () => {
           const finalAvg = totalCoeff ? parseFloat(((sumWeighted + report) / (totalCoeff + 1)).toFixed(2)) : 0;
 
           // Attendance
-          const absences = Object.entries(attendance).filter(([k, v]) => k.endsWith(`-${t.id}`) && v === 'A').length;
+          // Fix: Access status property of AttendanceDetail object
+          const absences = Object.entries(attendance).filter(([k, v]) => k.endsWith(`-${t.id}`) && (v as any).status === 'A').length;
 
           // Age
           let age = 0;

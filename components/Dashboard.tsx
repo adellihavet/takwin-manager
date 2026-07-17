@@ -40,7 +40,18 @@ const Dashboard: React.FC = () => {
   // Load from local storage on mount
   useEffect(() => {
     const savedData = localStorage.getItem('takwin_specialties_db');
-    if (savedData) try { setSpecialties(JSON.parse(savedData)); setEditData(JSON.parse(savedData)); } catch(e){}
+    if (savedData) {
+      try {
+        const parsed: Specialty[] = JSON.parse(savedData);
+        const updated = parsed.map(s => {
+          const def = DEFAULT_SPECIALTIES.find(d => d.id === s.id);
+          return def ? { ...s, name: def.name, color: def.color || s.color } : s;
+        });
+        setSpecialties(updated);
+        setEditData(updated);
+        localStorage.setItem('takwin_specialties_db', JSON.stringify(updated));
+      } catch(e){}
+    }
     
     const savedInst = localStorage.getItem('takwin_institution_db');
     if (savedInst) try { setInstitution(JSON.parse(savedInst)); setEditInstitution(JSON.parse(savedInst)); } catch(e){}

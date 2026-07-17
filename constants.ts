@@ -2,7 +2,7 @@
 import { Specialty, SessionInfo, Module, Distribution, ModuleContent } from './types';
 
 export const SPECIALTIES: Specialty[] = [
-  { id: 'pe', name: 'التربية البدنية', count: 149, groups: 5, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  { id: 'pe', name: 'التربية البدنية والرياضية', count: 149, groups: 5, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
   { id: 'eng', name: 'اللغة الإنجليزية', count: 89, groups: 3, color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' },
   { id: 'fr', name: 'اللغة الفرنسية', count: 24, groups: 1, color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
   { id: 'ar', name: 'اللغة العربية', count: 106, groups: 3, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
