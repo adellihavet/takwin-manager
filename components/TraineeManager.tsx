@@ -718,3 +718,5 @@ const TraineeManager: React.FC = () => {
         </div>
     );
 };
+
+export default TraineeManager;
