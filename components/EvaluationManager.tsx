@@ -78,6 +78,11 @@ const EvaluationManager: React.FC = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const reportInputRef = useRef<HTMLInputElement>(null);
 
+    // Split Reports Printing State
+    const [isReportSplitModalOpen, setIsReportSplitModalOpen] = useState(false);
+    const [reportSplitCount, setReportSplitCount] = useState<1 | 2 | 3>(1);
+    const [reportPartTeachers, setReportPartTeachers] = useState<string[]>(['', '', '']);
+
     useEffect(() => {
         const savedTrainees = localStorage.getItem('takwin_trainees_db');
         if (savedTrainees) try { setTrainees(JSON.parse(savedTrainees)); } catch(e) {}
@@ -374,6 +379,20 @@ const EvaluationManager: React.FC = () => {
         return options;
     };
 
+    const getAllTrainerNames = () => {
+        const names = new Set<string>();
+        Object.values(trainerConfig).forEach((conf: any) => {
+            if (conf && conf.names) {
+                Object.values(conf.names).forEach((name: any) => {
+                    if (typeof name === 'string' && name.trim()) {
+                        names.add(name.trim());
+                    }
+                });
+            }
+        });
+        return Array.from(names);
+    };
+
     const getAllGroupsList = () => {
         const list: {value: string, label: string}[] = [];
         specialties.forEach(s => {
@@ -556,14 +575,29 @@ const EvaluationManager: React.FC = () => {
     };
 
     const handlePrintReportSheet = (scope: 'current' | 'all') => {
+        if (scope === 'current') {
+            if (!reportGroupFilter) {
+                alert("يرجى تحديد الفوج أولاً للطباعة الفردية.");
+                return;
+            }
+            // Reset split state and open the split print options modal
+            setReportSplitCount(1);
+            setReportPartTeachers(['', '', '']);
+            setIsReportSplitModalOpen(true);
+        } else {
+            executePrintReportSheet('all', 1, ['', '', '']);
+        }
+    };
+
+    const executePrintReportSheet = (scope: 'current' | 'all', splitCount: 1 | 2 | 3, teachers: string[]) => {
         let sheetsToPrint: typeof reportPrintData = [];
 
-        const getReportSheetObject = (specId: string, g: number, traineesList: Trainee[]) => {
+        const getReportSheetObject = (specId: string, g: number, traineesList: Trainee[], suffix: string = '', tName: string = '') => {
             const specName = specialties.find(s => s.id === specId)?.name || '';
             return {
-                groupName: `فوج ${g}`,
+                groupName: `فوج ${g}${suffix}`,
                 specialtyName: specName,
-                teacherName: 'الأستاذ المشرف / المكون المرافق',
+                teacherName: tName || 'الأستاذ المشرف / المكون المرافق',
                 list: traineesList
             };
         };
@@ -577,7 +611,30 @@ const EvaluationManager: React.FC = () => {
             const g = parseInt(gNum);
             const filtered = trainees.filter(t => t.specialtyId === specId && t.groupId === g)
                 .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
-            sheetsToPrint.push(getReportSheetObject(specId, g, filtered));
+
+            if (splitCount === 1) {
+                sheetsToPrint.push(getReportSheetObject(specId, g, filtered, '', teachers[0]));
+            } else {
+                const total = filtered.length;
+                let partLists: Trainee[][] = [];
+                if (splitCount === 2) {
+                    const size1 = Math.ceil(total / 2);
+                    partLists.push(filtered.slice(0, size1));
+                    partLists.push(filtered.slice(size1));
+                } else {
+                    const size1 = Math.ceil(total / 3);
+                    const size2 = Math.ceil((total - size1) / 2);
+                    partLists.push(filtered.slice(0, size1));
+                    partLists.push(filtered.slice(size1, size1 + size2));
+                    partLists.push(filtered.slice(size1 + size2));
+                }
+
+                partLists.forEach((list, idx) => {
+                    if (list.length > 0) {
+                        sheetsToPrint.push(getReportSheetObject(specId, g, list, ` (القسم ${idx + 1})`, teachers[idx]));
+                    }
+                });
+            }
         } else {
             specialties.forEach(spec => {
                 for (let g = 1; g <= spec.groups; g++) {
@@ -1724,6 +1781,155 @@ const EvaluationManager: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Report Split and Print Modal */}
+            {isReportSplitModalOpen && (() => {
+                const getSelectedGroupTrainees = () => {
+                    if (!reportGroupFilter) return [];
+                    const [specId, gNum] = reportGroupFilter.split('-');
+                    const g = parseInt(gNum);
+                    return trainees.filter(t => t.specialtyId === specId && t.groupId === g)
+                        .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
+                };
+
+                const currentGroupTrainees = getSelectedGroupTrainees();
+                const totalTraineesCount = currentGroupTrainees.length;
+
+                // Divide into parts based on split count
+                const partLists: Trainee[][] = [];
+                if (reportSplitCount === 1) {
+                    partLists.push(currentGroupTrainees);
+                } else if (reportSplitCount === 2) {
+                    const size1 = Math.ceil(totalTraineesCount / 2);
+                    partLists.push(currentGroupTrainees.slice(0, size1));
+                    partLists.push(currentGroupTrainees.slice(size1));
+                } else if (reportSplitCount === 3) {
+                    const size1 = Math.ceil(totalTraineesCount / 3);
+                    const size2 = Math.ceil((totalTraineesCount - size1) / 2);
+                    partLists.push(currentGroupTrainees.slice(0, size1));
+                    partLists.push(currentGroupTrainees.slice(size1, size1 + size2));
+                    partLists.push(currentGroupTrainees.slice(size1 + size2));
+                }
+
+                const getPartRangeLabel = (list: Trainee[]) => {
+                    if (list.length === 0) return 'لا يوجد متكونين';
+                    if (list.length === 1) return `متكون واحد: ${list[0].surname} ${list[0].name}`;
+                    const first = `${list[0].surname} ${list[0].name}`;
+                    const last = `${list[list.length - 1].surname} ${list[list.length - 1].name}`;
+                    return `من: ${first} ← إلى: ${last}`;
+                };
+
+                const [specId, gNum] = (reportGroupFilter || '').split('-');
+                const specialtyName = specialties.find(s => s.id === specId)?.name || '';
+
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4" style={{ direction: 'rtl' }}>
+                        <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-xl p-6 relative max-h-[90vh] overflow-y-auto">
+                            <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-3">
+                                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                    <Printer className="text-amber-500 w-6 h-6" />
+                                    خيارات تقسيم وطباعة وثيقة التقييم
+                                </h3>
+                                <button onClick={() => setIsReportSplitModalOpen(false)} className="text-slate-400 hover:text-white mr-auto">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {/* Group Info */}
+                                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-1 text-right text-sm">
+                                    <p className="text-slate-400">التخصص الحالي: <span className="text-white font-bold">{specialtyName}</span></p>
+                                    <p className="text-slate-400">الفوج المحدد: <span className="text-amber-400 font-bold">فوج {gNum}</span></p>
+                                    <p className="text-slate-400">العدد الإجمالي للمتكونين: <span className="text-white font-bold">{totalTraineesCount} متكون</span></p>
+                                </div>
+
+                                {/* Split Selection */}
+                                <div className="space-y-2">
+                                    <label className="text-xs text-slate-400 font-bold block text-right">كيف ترغب في تقسيم هذا الفوج للتقييم؟</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setReportSplitCount(1)}
+                                            className={`p-3 rounded-xl font-bold text-xs transition-all text-center border ${reportSplitCount === 1 ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-900/20' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:bg-slate-800'}`}
+                                        >
+                                            فوج كامل (بدون تقسيم)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setReportSplitCount(2)}
+                                            className={`p-3 rounded-xl font-bold text-xs transition-all text-center border ${reportSplitCount === 2 ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-900/20' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:bg-slate-800'}`}
+                                        >
+                                            تقسيم إلى قسمين (2)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setReportSplitCount(3)}
+                                            className={`p-3 rounded-xl font-bold text-xs transition-all text-center border ${reportSplitCount === 3 ? 'bg-amber-600 text-white border-amber-500 shadow-lg shadow-amber-900/20' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:bg-slate-800'}`}
+                                        >
+                                            تقسيم إلى ثلاثة أقسام (3)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Parts details and teacher assignments */}
+                                <div className="space-y-3 pt-2">
+                                    <p className="text-xs text-slate-400 font-bold text-right">تحديد المؤطرين لكل قسم:</p>
+                                    {partLists.map((partTrainees, idx) => (
+                                        <div key={idx} className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="font-bold text-amber-400">القسم {idx + 1}</span>
+                                                <span className="text-slate-400 font-medium">{partTrainees.length} متكون</span>
+                                            </div>
+                                            <p className="text-[11px] text-slate-400 text-right font-mono bg-slate-950/80 px-2 py-1 rounded">
+                                                {getPartRangeLabel(partTrainees)}
+                                            </p>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] text-slate-400 block text-right font-bold">اسم الأستاذ المصحح / المؤطر:</label>
+                                                <input
+                                                    type="text"
+                                                    list="trainers-list"
+                                                    placeholder="اكتب اسم الأستاذ أو اختره من القائمة..."
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-white text-xs text-right outline-none focus:border-amber-500"
+                                                    value={reportPartTeachers[idx]}
+                                                    onChange={e => {
+                                                        const updated = [...reportPartTeachers];
+                                                        updated[idx] = e.target.value;
+                                                        setReportPartTeachers(updated);
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-6 border-t border-slate-800 pt-4">
+                                <button
+                                    onClick={() => setIsReportSplitModalOpen(false)}
+                                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-6 py-2 rounded-xl text-xs transition-all"
+                                >
+                                    إلغاء
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsReportSplitModalOpen(false);
+                                        executePrintReportSheet('current', reportSplitCount, reportPartTeachers);
+                                    }}
+                                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-6 py-2 rounded-xl text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-amber-900/20"
+                                >
+                                    <Printer className="w-4 h-4" /> تأكيد وطباعة الوثيقة
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            <datalist id="trainers-list">
+                {getAllTrainerNames().map((name, idx) => (
+                    <option key={idx} value={name} />
+                ))}
+            </datalist>
         </div>
     );
 };
