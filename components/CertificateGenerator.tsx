@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Printer, Filter, Calendar, PenTool } from 'lucide-react';
+import { Printer, Filter, Calendar, PenTool, Hash, Search, UserX, UserCheck, AlertTriangle } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES } from '../constants';
 
@@ -11,6 +11,13 @@ const CertificateGenerator: React.FC = () => {
     const [filterSpecialty, setFilterSpecialty] = useState<string>('all');
     const [deliberationDate, setDeliberationDate] = useState<string>('');
     const [signatureDate, setSignatureDate] = useState<string>('');
+
+    // Certificate numbering config state for each specialty
+    const [certificateConfigs, setCertificateConfigs] = useState<Record<string, { startNumber: number; prefix: string; padLength: number }>>({});
+
+    // Deferred/postponed trainee IDs state (for دورة استدراكية)
+    const [deferredTraineeIds, setDeferredTraineeIds] = useState<string[]>([]);
+    const [searchTraineeQuery, setSearchTraineeQuery] = useState<string>('');
 
     useEffect(() => {
         const savedTrainees = localStorage.getItem('takwin_trainees_db');
@@ -32,13 +39,77 @@ const CertificateGenerator: React.FC = () => {
         const savedInst = localStorage.getItem('takwin_institution_db');
         if (savedInst) try { setInstitution(JSON.parse(savedInst)); } catch(e) {}
 
+        const savedConfigs = localStorage.getItem('takwin_certificate_numbers_config');
+        if (savedConfigs) {
+            try {
+                setCertificateConfigs(JSON.parse(savedConfigs));
+            } catch(e) {}
+        }
+
+        const savedDeferred = localStorage.getItem('takwin_deferred_certificates_ids');
+        if (savedDeferred) {
+            try {
+                setDeferredTraineeIds(JSON.parse(savedDeferred));
+            } catch(e) {}
+        }
+
         // ضبط تاريخ اليوم تلقائياً بتنسيق YYYY/MM/DD
         const today = new Date();
         const formattedDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
         setSignatureDate(formattedDate);
     }, []);
 
-    const filteredTrainees = trainees.filter(t => (filterSpecialty === 'all' || t.specialtyId === filterSpecialty));
+    const updateConfig = (specialtyId: string, fields: Partial<{ startNumber: number; prefix: string; padLength: number }>) => {
+        const updated = {
+            ...certificateConfigs,
+            [specialtyId]: {
+                ...(certificateConfigs[specialtyId] || { startNumber: 1, prefix: '', padLength: 2 }),
+                ...fields
+            }
+        };
+        setCertificateConfigs(updated);
+        localStorage.setItem('takwin_certificate_numbers_config', JSON.stringify(updated));
+    };
+
+    const toggleTraineeDeferral = (id: string) => {
+        let updated: string[];
+        if (deferredTraineeIds.includes(id)) {
+            updated = deferredTraineeIds.filter(tid => tid !== id);
+        } else {
+            updated = [...deferredTraineeIds, id];
+        }
+        setDeferredTraineeIds(updated);
+        localStorage.setItem('takwin_deferred_certificates_ids', JSON.stringify(updated));
+    };
+
+    const getCertificateNumber = (trainee: Trainee) => {
+        const specConfig = certificateConfigs[trainee.specialtyId] || { startNumber: 1, prefix: '', padLength: 2 };
+        const sortedTraineesOfSpec = trainees
+            .filter(t => t.specialtyId === trainee.specialtyId && !deferredTraineeIds.includes(t.id))
+            .sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
+        
+        const index = sortedTraineesOfSpec.findIndex(t => t.id === trainee.id);
+        if (index === -1) return '';
+        
+        const num = (specConfig.startNumber || 1) + index;
+        const paddedNum = String(num).padStart(specConfig.padLength || 2, '0');
+        return `${specConfig.prefix || ''}${paddedNum}`;
+    };
+
+    const filteredTrainees = trainees.filter(t => 
+        (filterSpecialty === 'all' || t.specialtyId === filterSpecialty) &&
+        !deferredTraineeIds.includes(t.id)
+    );
+
+    // Sort to group by specialty, then sort alphabetically within each specialty
+    const sortedFilteredTrainees = [...filteredTrainees].sort((a, b) => {
+        if (a.specialtyId !== b.specialtyId) {
+            return a.specialtyId.localeCompare(b.specialtyId);
+        }
+        const nameA = `${a.surname} ${a.name}`;
+        const nameB = `${b.surname} ${b.name}`;
+        return nameA.localeCompare(nameB, 'ar');
+    });
     
     const handlePrint = () => {
         const content = document.getElementById('certificates-print-template');
@@ -113,19 +184,212 @@ const CertificateGenerator: React.FC = () => {
                         </select>
                     </div>
                 </div>
+
+                {/* Certificate numbers configuration per specialty */}
+                <div className="mt-8 border-t border-slate-700/80 pt-6">
+                    <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <Hash className="w-5 h-5 text-amber-500" />
+                        ضبط مجالات أرقام الشهادات لكل تخصص
+                    </h3>
+                    <p className="text-slate-400 text-xs mb-4">
+                        حدد رقم البداية وبادئة الأرقام (إن وجدت) وطول الأصفار لكل تخصص لتوليد أرقام تسلسلية رقمية ذكية لكل متكون تلقائياً بالترتيب الأبجدي.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {specialties.map(spec => {
+                            const config = certificateConfigs[spec.id] || { startNumber: 1, prefix: '', padLength: 2 };
+                            const specTraineesCount = trainees.filter(t => t.specialtyId === spec.id).length;
+                            
+                            // Calculate expected range
+                            const start = config.startNumber || 1;
+                            const end = start + Math.max(0, specTraineesCount - 1);
+                            const pad = config.padLength || 2;
+                            const prefix = config.prefix || '';
+                            
+                            const rangeText = specTraineesCount > 0 
+                                ? `من ${prefix}${String(start).padStart(pad, '0')} إلى ${prefix}${String(end).padStart(pad, '0')}`
+                                : 'لا يوجد متكونين في هذا التخصص حالياً';
+
+                            return (
+                                <div key={spec.id} className="bg-slate-950/40 border border-slate-800 rounded-xl p-4 space-y-3">
+                                    <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
+                                        <span className="font-bold text-white text-sm flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: spec.color || '#3b82f6' }} />
+                                            {spec.name}
+                                        </span>
+                                        <span className="text-xs bg-slate-800 text-slate-300 px-2.5 py-0.5 rounded-full font-bold font-mono">
+                                            {specTraineesCount} متكون
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-400 font-bold block text-right">رقم البداية:</label>
+                                            <input 
+                                                type="number" 
+                                                min="1"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-amber-500 text-center font-bold font-mono"
+                                                value={config.startNumber || 1} 
+                                                onChange={e => updateConfig(spec.id, { startNumber: parseInt(e.target.value) || 1 })} 
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-400 font-bold block text-right">البادئة/السابقة:</label>
+                                            <input 
+                                                type="text" 
+                                                placeholder="مثال: 10/"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-amber-500 text-center font-bold"
+                                                value={config.prefix || ''} 
+                                                onChange={e => updateConfig(spec.id, { prefix: e.target.value })} 
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-slate-400 font-bold block text-right">عدد الخانات (أصفار):</label>
+                                            <input 
+                                                type="number" 
+                                                min="1"
+                                                max="6"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-amber-500 text-center font-bold font-mono"
+                                                value={config.padLength || 2} 
+                                                onChange={e => updateConfig(spec.id, { padLength: parseInt(e.target.value) || 1 })} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-950/60 py-2 px-3 rounded-lg text-center border border-slate-900">
+                                        <p className="text-xs text-slate-400 font-medium">
+                                            المجال المتولد: <span className="text-amber-400 font-bold font-mono">{rangeText}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Exclude / Defer Trainees Section */}
+                <div className="mt-8 border-t border-slate-700/80 pt-6">
+                    <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                        <UserX className="w-5 h-5 text-red-500" />
+                        استثناء وتأجيل طباعة شهادات المتكونين (المتخلفين والدورة الاستدراكية)
+                    </h3>
+                    <p className="text-slate-400 text-xs mb-4 leading-relaxed">
+                        قم بتحديد المتكونين المؤجلين أو المتخلفين الذين ترغب في عدم إصدار شهادات لهم في هذه الدورة. المتكون المستثنى 
+                        <strong className="text-amber-400"> لن تطبع شهادته</strong>، وسيتم <strong className="text-amber-400">تجاوزه تلقائياً في حساب تسلسل أرقام الشهادات</strong> لضمان بقاء الأرقام متتالية ومستمرة بدون أي فراغات.
+                    </p>
+
+                    <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-5 space-y-4">
+                        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                            <div className="relative w-full sm:max-w-md">
+                                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                <input
+                                    type="text"
+                                    placeholder="ابحث عن متكون بالاسم أو اللقب..."
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl pr-10 pl-4 py-2 text-white text-xs text-right outline-none focus:border-amber-500 placeholder:text-slate-500"
+                                    value={searchTraineeQuery}
+                                    onChange={e => setSearchTraineeQuery(e.target.value)}
+                                />
+                            </div>
+                            <div className="text-xs text-slate-400 font-bold flex gap-4">
+                                <span>إجمالي المستطنين حالياً: <span className="text-red-400 font-mono text-sm">{deferredTraineeIds.length}</span></span>
+                                <span>|</span>
+                                <span>المعروضين للتعديل: <span className="text-amber-400 font-mono text-sm">{
+                                    trainees.filter(t => (filterSpecialty === 'all' || t.specialtyId === filterSpecialty) && 
+                                    (`${t.surname} ${t.name}`.toLowerCase().includes(searchTraineeQuery.trim().toLowerCase()))).length
+                                }</span></span>
+                            </div>
+                        </div>
+
+                        <div className="max-h-72 overflow-y-auto border border-slate-800/80 rounded-xl divide-y divide-slate-800/60 bg-slate-950/20 pr-1">
+                            {(() => {
+                                const list = trainees.filter(t => {
+                                    const matchesSpec = filterSpecialty === 'all' || t.specialtyId === filterSpecialty;
+                                    const fullName = `${t.surname} ${t.name}`.toLowerCase();
+                                    const matchesSearch = fullName.includes(searchTraineeQuery.trim().toLowerCase());
+                                    return matchesSpec && matchesSearch;
+                                }).sort((a, b) => (a.surname + a.name).localeCompare(b.surname + b.name, 'ar'));
+
+                                if (list.length === 0) {
+                                    return (
+                                        <div className="p-8 text-center text-xs text-slate-500">
+                                            لا توجد نتائج تطابق خيارات التصفية والبحث الحالية.
+                                        </div>
+                                    );
+                                }
+
+                                return list.map(t => {
+                                    const isDeferred = deferredTraineeIds.includes(t.id);
+                                    return (
+                                        <div key={t.id} className="p-3 flex items-center justify-between hover:bg-slate-900/30 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleTraineeDeferral(t.id)}
+                                                    className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                                                        isDeferred 
+                                                            ? 'bg-red-500/10 border-red-500 text-red-500 hover:bg-red-500/20' 
+                                                            : 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500 hover:border-emerald-400 hover:bg-emerald-500/20'
+                                                    }`}
+                                                >
+                                                    {isDeferred ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                                                </button>
+                                                <div className="text-right">
+                                                    <p className={`text-xs font-bold ${isDeferred ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                                        {t.surname} {t.name}
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-400">
+                                                        {specialties.find(s => s.id === t.specialtyId)?.name || ''} - الفوج {t.groupId}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleTraineeDeferral(t.id)}
+                                                    className={`px-3 py-1 rounded-full text-[10px] font-bold transition-all ${
+                                                        isDeferred 
+                                                            ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30' 
+                                                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
+                                                    }`}
+                                                >
+                                                    {isDeferred ? 'مؤجل ومستثنى' : 'نشط (مدرج في الطباعة)'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 gap-8 print:hidden opacity-90 transform scale-75 md:scale-90 origin-top select-none pointer-events-none">
                 <div className="text-center text-slate-500 mb-2 font-bold bg-slate-800/50 p-2 rounded">-- معاينة النسخة الرسمية النهائية --</div>
-                {filteredTrainees.slice(0, 1).map(t => (
-                    <CertificateCard key={t.id} trainee={t} institution={institution} specialtyName={specialties.find(s=>s.id === t.specialtyId)?.name || ''} deliberationDate={deliberationDate} signatureDate={signatureDate} />
+                {sortedFilteredTrainees.slice(0, 1).map(t => (
+                    <CertificateCard 
+                        key={t.id} 
+                        trainee={t} 
+                        institution={institution} 
+                        specialtyName={specialties.find(s=>s.id === t.specialtyId)?.name || ''} 
+                        deliberationDate={deliberationDate} 
+                        signatureDate={signatureDate} 
+                        certificateNumber={getCertificateNumber(t)}
+                    />
                 ))}
             </div>
 
             <div id="certificates-print-template" className="hidden">
-                {filteredTrainees.map(t => (
+                {sortedFilteredTrainees.map(t => (
                     <div key={t.id} className="page-break">
-                        <CertificateCard trainee={t} institution={institution} specialtyName={specialties.find(s=>s.id === t.specialtyId)?.name || ''} deliberationDate={deliberationDate} signatureDate={signatureDate} />
+                        <CertificateCard 
+                            trainee={t} 
+                            institution={institution} 
+                            specialtyName={specialties.find(s=>s.id === t.specialtyId)?.name || ''} 
+                            deliberationDate={deliberationDate} 
+                            signatureDate={signatureDate} 
+                            certificateNumber={getCertificateNumber(t)}
+                        />
                     </div>
                 ))}
             </div>
@@ -139,9 +403,10 @@ interface CertificateProps {
     specialtyName: string;
     deliberationDate: string;
     signatureDate: string;
+    certificateNumber: string;
 }
 
-const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, specialtyName, deliberationDate, signatureDate }) => {
+const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, specialtyName, deliberationDate, signatureDate, certificateNumber }) => {
     
     // --- دوال التواريخ (مهمة جداً لضبط الاتجاه) ---
     const formatDate = (dateString: string | undefined) => {
@@ -223,7 +488,7 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                     <p>- بمقتضى الأمر رقم 06-03 المؤرخ في 19 جمادى الثانية عام 1427 الموافق 15 يوليو سنة 2006، المتضمن القانون الأساسي العام للوظيفة العمومية، المتمم،</p>
                     <p>- وبمقتضى المرسوم التنفيذي رقم 25-54 المؤرخ في 21 رجب عام 1446 الموافق 21 جانفي سنة 2025، والمتضمن القانون الأساسي الخاص بالموظفين المنتمين للأسلاك الخاصة بالتربية الوطنية،</p>
                     <p>- وبمقتضى القرار المؤرخ في 9 ذي القعدة عام 1436 الموافق 24 غشت سنة 2015، يحدد كيفيات تنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي لموظفي التعليم ومدته وكذا محتوى برامجه،</p>
-                    <p>- وبناء على المنشور رقم 355 المؤرخ في 2025/11/23 المتعلق بتنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي والتكوين المسبق للتعيين للأساتذة المتعاقدين المدمجين بعنوان سنة <DateDisplay value={formatSchoolYear("2025/2026")} isDate={false} className={VARIABLE_STYLE + " text-base"}/>،</p>
+                    <p>- وبناء على المنشور رقم 355 المؤرخ في 2025/11/23 المتعلق بتنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي والتكوين المسبق للتعيين للأساتذة المتعاقدين المدمجين بعنوان سنة 2025،</p>
                     <p>- وبناء على محضر لجنة نهاية التكوين بتاريخ: <span className="border-b border-black px-6 inline-flex"><DateDisplay value={deliberationDate} className={VARIABLE_STYLE} /></span></p>
                 </div>
 
@@ -259,7 +524,7 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                     <div className="flex gap-12 w-full justify-center">
                         <p>حرر بـ: <span className={`border-b border-dotted border-black px-6 ${VARIABLE_STYLE}`}>{institution.wilaya || '....................'}</span></p>
                         <p>في: <span className="border-b border-dotted border-black px-6 inline-flex"><DateDisplay value={signatureDate} className={VARIABLE_STYLE} /></span></p>
-                        <p>تحت رقم: <span className="border-b border-dotted border-black px-12">...................</span></p>
+                        <p>تحت رقم: <span className={`border-b border-dotted border-black px-8 ${VARIABLE_STYLE}`}>{certificateNumber || '...................'}</span></p>
                     </div>
                 </div>
 
