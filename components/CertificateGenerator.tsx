@@ -488,7 +488,7 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                     <p>- بمقتضى الأمر رقم 06-03 المؤرخ في 19 جمادى الثانية عام 1427 الموافق 15 يوليو سنة 2006، المتضمن القانون الأساسي العام للوظيفة العمومية، المتمم،</p>
                     <p>- وبمقتضى المرسوم التنفيذي رقم 25-54 المؤرخ في 21 رجب عام 1446 الموافق 21 جانفي سنة 2025، والمتضمن القانون الأساسي الخاص بالموظفين المنتمين للأسلاك الخاصة بالتربية الوطنية،</p>
                     <p>- وبمقتضى القرار المؤرخ في 9 ذي القعدة عام 1436 الموافق 24 غشت سنة 2015، يحدد كيفيات تنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي لموظفي التعليم ومدته وكذا محتوى برامجه،</p>
-                    <p>- وبناء على المنشور رقم 355 المؤرخ في 2025/11/23 المتعلق بتنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي والتكوين المسبق للتعيين للأساتذة المتعاقدين المدمجين بعنوان سنة 2025،</p>
+                    <p>- وبناء على الرسالة المنشور رقم 355 المؤرخة في 2025/11/23 المتعلقة بتنظيم التكوين البيداغوجي التحضيري أثناء التربص التجريبي والتكوين المسبق للتعيين للأساتذة المتعاقدين المدمجين بعنوان سنة 2025،</p>
                     <p>- وبناء على محضر لجنة نهاية التكوين بتاريخ: <span className="border-b border-black px-6 inline-flex"><DateDisplay value={deliberationDate} className={VARIABLE_STYLE} /></span></p>
                 </div>
 
@@ -500,7 +500,7 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                 {/* 6. Main Body Content (Styled Variables - Unified Font & Color) */}
                 <div className="px-6 text-[22px] leading-[1.4] font-amiri text-right bg-slate-50/20 p-3 rounded-2xl border border-slate-100">
                     <p className="flex flex-wrap items-baseline gap-2 mb-1">
-                        <span>بأن السيد(ة):</span>
+                        <span>أن السيد(ة):</span>
                         {/* هنا تم استخدام نفس الستايل (الأخضر وخط الرقعة) لاسم الطالب */}
                         <span className={`border-b border-slate-400 px-4 min-w-[280px] text-center ${VARIABLE_STYLE} text-4xl`}>{trainee.surname} {trainee.name}</span>
                         <span>المولود(ة) في:</span>
@@ -514,7 +514,7 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                         <span className="font-black text-slate-900 bg-slate-100 px-4 rounded">أستاذ التعليم الابتدائي</span>
                         <span>مادة:</span>
                         <span className={`border-b-2 border-slate-900 px-6 ${VARIABLE_STYLE}`}>{specialtyName}</span>
-                        <span>بعنوان دفعة:</span>
+                        <span>دفعة:</span>
                         <span className="px-4 inline-flex"><DateDisplay value={formatSchoolYear("2025/2026")} isDate={false} className={VARIABLE_STYLE} /></span>
                     </p>
                 </div>
@@ -522,8 +522,8 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                 {/* 7. Footer (Styled Variables) */}
                 <div className="mt-4 flex justify-center items-center font-amiri font-bold text-lg border-y border-slate-100 py-1">
                     <div className="flex gap-12 w-full justify-center">
-                        <p>حرر بـ: <span className={`border-b border-dotted border-black px-6 ${VARIABLE_STYLE}`}>{institution.wilaya || '....................'}</span></p>
-                        <p>في: <span className="border-b border-dotted border-black px-6 inline-flex"><DateDisplay value={signatureDate} className={VARIABLE_STYLE} /></span></p>
+                        <p>حرر في: <span className={`border-b border-dotted border-black px-6 ${VARIABLE_STYLE}`}>{institution.wilaya || '....................'}</span></p>
+                        <p>بتاريخ: <span className="border-b border-dotted border-black px-6 inline-flex"><DateDisplay value={signatureDate} className={VARIABLE_STYLE} /></span></p>
                         <p>تحت رقم: <span className={`border-b border-dotted border-black px-8 ${VARIABLE_STYLE}`}>{certificateNumber || '...................'}</span></p>
                     </div>
                 </div>
