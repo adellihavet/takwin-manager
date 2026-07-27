@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info, FileText, LayoutGrid, CheckCircle2, AlertTriangle, FileWarning, Pencil } from 'lucide-react';
+import { Users, Upload, Plus, Trash2, Search, Table, Download, Layers, ArrowRightLeft, Printer, ClipboardList, UserPlus, CheckSquare, Calendar, Check, X as XIcon, Repeat, X, BarChart3, Info, FileText, LayoutGrid, CheckCircle2, AlertTriangle, FileWarning } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig, AttendanceRecord, AttendanceStatus, SessionInfo } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES, SESSIONS } from '../constants';
 import { getWorkingDays, formatDate } from '../utils';
@@ -29,7 +29,6 @@ const TraineeManager: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAdding, setIsAdding] = useState(false);
     const [transferTarget, setTransferTarget] = useState<Trainee | null>(null);
-    const [editingTrainee, setEditingTrainee] = useState<Trainee | null>(null);
     
     // Form State
     const [newTrainee, setNewTrainee] = useState<Partial<Trainee>>({
@@ -97,18 +96,6 @@ const TraineeManager: React.FC = () => {
         saveTrainees(updatedTrainees);
         setTransferTarget(null);
         alert(`تم نقل المتربص ${transferTarget.surname} ${transferTarget.name} إلى الفوج ${newGroupId} بنجاح.`);
-    };
-
-    const handleSaveEdit = () => {
-        if (!editingTrainee || !editingTrainee.surname || !editingTrainee.name) {
-            alert('يرجى ملء اللقب والاسم على الأقل.');
-            return;
-        }
-        const updatedTrainees = trainees.map(t => 
-            t.id === editingTrainee.id ? editingTrainee : t
-        );
-        saveTrainees(updatedTrainees);
-        setEditingTrainee(null);
     };
 
     const handleSmartAdd = () => {
@@ -366,7 +353,7 @@ const TraineeManager: React.FC = () => {
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-xs text-slate-400 font-bold block">تاريخ الميلاد</label>
-                                        <input type="text" placeholder="مثال: 1990/05/15 أو خلال سنة 1985" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.dob || ''} onChange={e => setNewTrainee({...newTrainee, dob: e.target.value})} />
+                                        <input type="date" className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-blue-500 text-right" value={newTrainee.dob || ''} onChange={e => setNewTrainee({...newTrainee, dob: e.target.value})} />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-xs text-slate-400 font-bold block">مكان الميلاد</label>
@@ -452,149 +439,6 @@ const TraineeManager: React.FC = () => {
                         </div>
                     )}
 
-                    {/* Edit Trainee Modal */}
-                    {editingTrainee && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
-                            <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl p-6 relative max-h-[90vh] overflow-y-auto">
-                                <div className="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
-                                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                        <Pencil className="text-amber-500 w-5 h-5" />
-                                        تعديل بيانات المتربص: <span className="text-amber-400 font-bold">{editingTrainee.surname} {editingTrainee.name}</span>
-                                    </h3>
-                                    <button onClick={() => setEditingTrainee(null)} className="text-slate-400 hover:text-white">
-                                        <X className="w-5 h-5" />
-                                    </button>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">اللقب <span className="text-red-500">*</span></label>
-                                        <input 
-                                            type="text"
-                                            placeholder="اللقب" 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right font-bold" 
-                                            value={editingTrainee.surname || ''} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, surname: e.target.value})} 
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">الاسم <span className="text-red-500">*</span></label>
-                                        <input 
-                                            type="text"
-                                            placeholder="الاسم" 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right font-bold" 
-                                            value={editingTrainee.name || ''} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, name: e.target.value})} 
-                                        />
-                                    </div>
-                                    
-                                    <div className="space-y-1 md:col-span-2 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <label className="text-xs text-amber-400 font-bold block">تاريخ الميلاد</label>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const matchYear = (editingTrainee.dob || '').match(/\d{4}/);
-                                                        const currentYear = matchYear ? matchYear[0] : '1985';
-                                                        setEditingTrainee({...editingTrainee, dob: `خلال سنة ${currentYear}`});
-                                                    }}
-                                                    className="text-[11px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-2.5 py-1 rounded border border-amber-500/30 transition-colors font-bold"
-                                                >
-                                                    تحويل إلى صيغة (خلال سنة...)
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <input 
-                                            type="text" 
-                                            placeholder="مثال: 1990/05/15 أو خلال سنة 1985" 
-                                            className="w-full bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right font-mono" 
-                                            value={editingTrainee.dob || ''} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, dob: e.target.value})} 
-                                        />
-                                        <p className="text-[11px] text-slate-400 mt-1">
-                                            💡 يمكنك كتابة تاريخ كامل (مثال: 1995-03-21) أو كتابة <span className="text-amber-300 font-bold">خلال سنة 1985</span> لمن لم يحدد له يوم وشهر. ستظهر الصيغة كما هي في شهادة النجاح.
-                                        </p>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">مكان الميلاد</label>
-                                        <input 
-                                            type="text"
-                                            placeholder="مكان الميلاد" 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right" 
-                                            value={editingTrainee.pob || ''} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, pob: e.target.value})} 
-                                        />
-                                    </div>
-                                    
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">التخصص</label>
-                                        <select 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right" 
-                                            value={editingTrainee.specialtyId} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, specialtyId: e.target.value})}
-                                        >
-                                            {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">الفوج</label>
-                                        <select 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right" 
-                                            value={editingTrainee.groupId || 1} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, groupId: parseInt(e.target.value) || 1})}
-                                        >
-                                            {Array.from({ length: specialties.find(s => s.id === editingTrainee.specialtyId)?.groups || 1 }).map((_, i) => (
-                                                <option key={i+1} value={i+1}>فوج {i+1}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">الجنس</label>
-                                        <select 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right" 
-                                            value={editingTrainee.gender} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, gender: e.target.value as 'M'|'F'})}
-                                        >
-                                            <option value="M">ذكر</option>
-                                            <option value="F">أنثى</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">مؤسسة العمل</label>
-                                        <input 
-                                            type="text"
-                                            placeholder="المؤسسة" 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right" 
-                                            value={editingTrainee.school || ''} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, school: e.target.value})} 
-                                        />
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-xs text-slate-400 font-bold block">البلدية / الولاية</label>
-                                        <input 
-                                            type="text"
-                                            placeholder="البلدية" 
-                                            className="w-full bg-slate-950 border border-slate-700 p-2.5 rounded-lg text-white outline-none focus:border-amber-500 text-right" 
-                                            value={editingTrainee.municipality || ''} 
-                                            onChange={e => setEditingTrainee({...editingTrainee, municipality: e.target.value})} 
-                                        />
-                                    </div>
-                                </div>
-                                
-                                <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
-                                    <button onClick={() => setEditingTrainee(null)} className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-6 py-2.5 rounded-xl transition-all">إلغاء</button>
-                                    <button onClick={handleSaveEdit} className="bg-amber-600 hover:bg-amber-500 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-amber-900/20">حفظ وتحديث البيانات</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Search & Filter Controls */}
                     <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-900/40 p-4 rounded-xl border border-slate-800/80 print:hidden mb-4">
                         <div className="relative flex-1 w-full">
@@ -624,14 +468,7 @@ const TraineeManager: React.FC = () => {
                     <div className="bg-slate-900/50 rounded-xl border border-slate-800 overflow-hidden">
                         <table className="w-full text-right text-sm">
                             <thead className="bg-slate-950 text-slate-400">
-                                <tr>
-                                    <th className="p-4">#</th>
-                                    <th className="p-4">اللقب والاسم</th>
-                                    <th className="p-4">تاريخ ومكان الميلاد</th>
-                                    <th className="p-4">التخصص</th>
-                                    <th className="p-4">الفوج</th>
-                                    <th className="p-4 text-center">إجراءات</th>
-                                </tr>
+                                <tr><th className="p-4">#</th><th className="p-4">اللقب والاسم</th><th className="p-4">التخصص</th><th className="p-4">الفوج</th><th className="p-4 text-center">إجراءات</th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800">
                                 {trainees
@@ -645,20 +482,9 @@ const TraineeManager: React.FC = () => {
                                         <tr key={t.id} className="hover:bg-slate-800/50">
                                             <td className="p-4 text-slate-500">{idx + 1}</td>
                                             <td className="p-4 font-bold text-white">{t.surname} {t.name}</td>
-                                            <td className="p-4">
-                                                <div className="font-mono text-amber-300 font-bold text-xs">{t.dob || 'غير محدد'}</div>
-                                                {t.pob && <div className="text-[11px] text-slate-400">بـ {t.pob}</div>}
-                                            </td>
                                             <td className="p-4">{specialties.find(s=>s.id === t.specialtyId)?.name}</td>
                                             <td className="p-4"><span className="bg-purple-500/10 text-purple-300 px-2 py-1 rounded font-bold">{t.groupId ? `فوج ${t.groupId}` : '-'}</span></td>
                                             <td className="p-4 text-center">
-                                                <button 
-                                                    onClick={() => setEditingTrainee(t)} 
-                                                    className="text-amber-400 hover:text-amber-300 p-1.5 hover:bg-slate-800 rounded transition-colors ml-2 inline-flex items-center gap-1"
-                                                    title="تعديل بيانات المتربص"
-                                                >
-                                                    <Pencil className="w-4 h-4" />
-                                                </button>
                                                 <button 
                                                     onClick={() => setTransferTarget(t)} 
                                                     className="text-purple-400 hover:text-purple-300 p-1.5 hover:bg-slate-800 rounded transition-colors ml-2 inline-flex items-center gap-1"

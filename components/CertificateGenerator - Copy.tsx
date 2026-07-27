@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Printer, Filter, Calendar, PenTool, Hash, Search, UserX, UserCheck, AlertTriangle, Eye, ChevronRight, ChevronLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Printer, Filter, Calendar, PenTool, Hash, Search, UserX, UserCheck, AlertTriangle } from 'lucide-react';
 import { Trainee, Specialty, InstitutionConfig } from '../types';
 import { SPECIALTIES as DEFAULT_SPECIALTIES } from '../constants';
 
@@ -19,34 +19,9 @@ const CertificateGenerator: React.FC = () => {
     const [deferredTraineeIds, setDeferredTraineeIds] = useState<string[]>([]);
     const [searchTraineeQuery, setSearchTraineeQuery] = useState<string>('');
 
-    // خيار قلب اليوم والشهر لتاريخ الميلاد في حال رفع البيانات بصيغة معكوسة
-    const [swapBirthDateMonthDay, setSwapBirthDateMonthDay] = useState<boolean>(() => {
-        return localStorage.getItem('takwin_swap_dob_md') === 'true';
-    });
-
-    const handleToggleSwapDob = (val: boolean) => {
-        setSwapBirthDateMonthDay(val);
-        localStorage.setItem('takwin_swap_dob_md', val ? 'true' : 'false');
-    };
-    
-    // State for selected trainee preview
-    const [previewTraineeId, setPreviewTraineeId] = useState<string>('');
-
-    const refreshTrainees = useCallback(() => {
-        const savedTrainees = localStorage.getItem('takwin_trainees_db');
-        if (savedTrainees) {
-            try { 
-                setTrainees(JSON.parse(savedTrainees)); 
-            } catch(e) {}
-        }
-    }, []);
-
     useEffect(() => {
-        refreshTrainees();
-
-        // Listen for storage changes or window focus to update trainees in real-time
-        window.addEventListener('focus', refreshTrainees);
-        window.addEventListener('storage', refreshTrainees);
+        const savedTrainees = localStorage.getItem('takwin_trainees_db');
+        if (savedTrainees) try { setTrainees(JSON.parse(savedTrainees)); } catch(e) {}
         
         const savedSpec = localStorage.getItem('takwin_specialties_db');
         if (savedSpec) {
@@ -82,12 +57,7 @@ const CertificateGenerator: React.FC = () => {
         const today = new Date();
         const formattedDate = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
         setSignatureDate(formattedDate);
-
-        return () => {
-            window.removeEventListener('focus', refreshTrainees);
-            window.removeEventListener('storage', refreshTrainees);
-        };
-    }, [refreshTrainees]);
+    }, []);
 
     const updateConfig = (specialtyId: string, fields: Partial<{ startNumber: number; prefix: string; padLength: number }>) => {
         const updated = {
@@ -188,7 +158,7 @@ const CertificateGenerator: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 bg-slate-800/50 p-6 rounded-xl border border-slate-700">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-800/50 p-6 rounded-xl border border-slate-700">
                     <div className="space-y-2">
                         <label className="text-slate-300 font-bold text-sm flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-amber-400" />
@@ -212,38 +182,6 @@ const CertificateGenerator: React.FC = () => {
                             <option value="all">كل التخصصات</option>
                             {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-slate-300 font-bold text-sm flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-purple-400" />
-                            صيغة تاريخ الميلاد (القوائم):
-                        </label>
-                        <div className="flex items-center gap-1 bg-slate-900 border border-slate-600 rounded-lg p-1 h-[42px]">
-                            <button
-                                type="button"
-                                onClick={() => handleToggleSwapDob(false)}
-                                className={`flex-1 py-1 px-2 text-xs font-bold rounded transition-all ${
-                                    !swapBirthDateMonthDay 
-                                        ? 'bg-amber-500 text-slate-950 shadow' 
-                                        : 'text-slate-400 hover:text-white'
-                                }`}
-                                title="عرض التاريخ مثلما هو دون تعديل"
-                            >
-                                كما هو
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleToggleSwapDob(true)}
-                                className={`flex-1 py-1 px-2 text-xs font-bold rounded transition-all ${
-                                    swapBirthDateMonthDay 
-                                        ? 'bg-purple-600 text-white shadow' 
-                                        : 'text-slate-400 hover:text-white'
-                                }`}
-                                title="تبديل موضع اليوم والشهر في تاريخ الميلاد"
-                            >
-                                🔀 قلب الشهر واليوم
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -426,103 +364,20 @@ const CertificateGenerator: React.FC = () => {
                 </div>
             </div>
 
-            {/* Interactive Screen Preview Section */}
-            {(() => {
-                const activePreviewTrainee = sortedFilteredTrainees.find(t => t.id === previewTraineeId) || sortedFilteredTrainees[0];
-                const activeIndex = activePreviewTrainee ? sortedFilteredTrainees.findIndex(t => t.id === activePreviewTrainee.id) : 0;
-
-                return (
-                    <div className="mt-8 pt-6 border-t border-slate-800 print:hidden space-y-4">
-                        <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center gap-3 w-full md:w-auto">
-                                <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
-                                    <Eye className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h4 className="text-sm font-bold text-white">معاينة شهادات النجاح المصدرة</h4>
-                                    <p className="text-[11px] text-slate-400">اختر أي متربص لمعاينة شهادته المصححة فوراً قبل الطباعة</p>
-                                </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
-                                <button
-                                    type="button"
-                                    onClick={refreshTrainees}
-                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-all border border-slate-700"
-                                    title="تحديث البيانات من القائمة"
-                                >
-                                    🔄 تحديث القائمة
-                                </button>
-
-                                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl p-1">
-                                    <button
-                                        type="button"
-                                        disabled={activeIndex <= 0}
-                                        onClick={() => {
-                                            if (activeIndex > 0) {
-                                                setPreviewTraineeId(sortedFilteredTrainees[activeIndex - 1].id);
-                                            }
-                                        }}
-                                        className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
-                                        title="المتربص السابق"
-                                    >
-                                        <ChevronRight className="w-4 h-4" />
-                                    </button>
-                                    
-                                    <span className="text-xs font-mono font-bold text-amber-400 px-2">
-                                        {sortedFilteredTrainees.length > 0 ? `${activeIndex + 1} / ${sortedFilteredTrainees.length}` : '0 / 0'}
-                                    </span>
-
-                                    <button
-                                        type="button"
-                                        disabled={activeIndex >= sortedFilteredTrainees.length - 1}
-                                        onClick={() => {
-                                            if (activeIndex < sortedFilteredTrainees.length - 1) {
-                                                setPreviewTraineeId(sortedFilteredTrainees[activeIndex + 1].id);
-                                            }
-                                        }}
-                                        className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
-                                        title="المتربص التالي"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                </div>
-
-                                <select
-                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-amber-500 max-w-xs font-bold"
-                                    value={activePreviewTrainee?.id || ''}
-                                    onChange={e => setPreviewTraineeId(e.target.value)}
-                                >
-                                    {sortedFilteredTrainees.map((t, idx) => (
-                                        <option key={t.id} value={t.id}>
-                                            ({idx + 1}) {t.surname} {t.name} - {specialties.find(s => s.id === t.specialtyId)?.name || ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {activePreviewTrainee ? (
-                            <div className="opacity-95 transform scale-75 md:scale-90 origin-top">
-                                <CertificateCard 
-                                    key={activePreviewTrainee.id} 
-                                    trainee={activePreviewTrainee} 
-                                    institution={institution} 
-                                    specialtyName={specialties.find(s=>s.id === activePreviewTrainee.specialtyId)?.name || ''} 
-                                    deliberationDate={deliberationDate} 
-                                    signatureDate={signatureDate} 
-                                    certificateNumber={getCertificateNumber(activePreviewTrainee)}
-                                    swapBirthDate={swapBirthDateMonthDay}
-                                />
-                            </div>
-                        ) : (
-                            <div className="p-8 text-center text-slate-500 bg-slate-900/30 rounded-2xl border border-slate-800">
-                                لا يوجد متكونين ينطبق عليهم خيار التصفية الحالي.
-                            </div>
-                        )}
-                    </div>
-                );
-            })()}
+            <div className="grid grid-cols-1 gap-8 print:hidden opacity-90 transform scale-75 md:scale-90 origin-top select-none pointer-events-none">
+                <div className="text-center text-slate-500 mb-2 font-bold bg-slate-800/50 p-2 rounded">-- معاينة النسخة الرسمية النهائية --</div>
+                {sortedFilteredTrainees.slice(0, 1).map(t => (
+                    <CertificateCard 
+                        key={t.id} 
+                        trainee={t} 
+                        institution={institution} 
+                        specialtyName={specialties.find(s=>s.id === t.specialtyId)?.name || ''} 
+                        deliberationDate={deliberationDate} 
+                        signatureDate={signatureDate} 
+                        certificateNumber={getCertificateNumber(t)}
+                    />
+                ))}
+            </div>
 
             <div id="certificates-print-template" className="hidden">
                 {sortedFilteredTrainees.map(t => (
@@ -534,7 +389,6 @@ const CertificateGenerator: React.FC = () => {
                             deliberationDate={deliberationDate} 
                             signatureDate={signatureDate} 
                             certificateNumber={getCertificateNumber(t)}
-                            swapBirthDate={swapBirthDateMonthDay}
                         />
                     </div>
                 ))}
@@ -550,61 +404,24 @@ interface CertificateProps {
     deliberationDate: string;
     signatureDate: string;
     certificateNumber: string;
-    swapBirthDate?: boolean;
 }
 
-const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, specialtyName, deliberationDate, signatureDate, certificateNumber, swapBirthDate = false }) => {
+const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, specialtyName, deliberationDate, signatureDate, certificateNumber }) => {
     
     // --- دوال التواريخ (مهمة جداً لضبط الاتجاه) ---
-    const formatDate = (dateString: string | undefined, isBirthDate: boolean = false) => {
+    const formatDate = (dateString: string | undefined) => {
         if (!dateString) return '..../..../.......';
-        
-        // إذا النص يحتوي على أحرف عربية (مثل "خلال 1966" أو "خلال سنة 1966") نعيد النص كما هو دون تحويل
-        if (/[\u0600-\u06FF]/.test(dateString)) {
-            return dateString;
-        }
-
-        // إذا كان نص التاريخ مجرد سنة (مثلاً 1966)
-        if (/^\d{4}$/.test(dateString.trim())) {
-            return dateString;
-        }
-
-        const shouldSwap = isBirthDate && swapBirthDate;
-
-        // صيغة سنة-شهر-يوم (مثال: 1990-05-15 أو 1990/05/15)
-        const yearFirstRegex = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/;
-        const matchYearFirst = dateString.match(yearFirstRegex);
-        if (matchYearFirst) {
-            let [_, year, partA, partB] = matchYearFirst;
-            let month = partA.padStart(2, '0');
-            let day = partB.padStart(2, '0');
-            if (shouldSwap) {
-                [month, day] = [day, month];
-            }
+        const isoDateRegex = /^(\d{4})-(\d{2})-(\d{2})/;
+        const match = dateString.match(isoDateRegex);
+        if (match) {
+            const [_, year, month, day] = match;
             return `${year}/${month}/${day}`; 
         }
-
-        // صيغة يوم-شهر-سنة (مثال: 15/05/1990 أو 15-05-1990)
-        const dayFirstRegex = /^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/;
-        const matchDayFirst = dateString.match(dayFirstRegex);
-        if (matchDayFirst) {
-            let [_, partA, partB, year] = matchDayFirst;
-            let day = partA.padStart(2, '0');
-            let month = partB.padStart(2, '0');
-            if (shouldSwap) {
-                [month, day] = [day, month];
-            }
-            return `${year}/${month}/${day}`;
-        }
-
         const date = new Date(dateString);
         if (isNaN(date.getTime())) return dateString;
-        let d = date.getDate().toString().padStart(2, '0');
-        let m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
         const y = date.getFullYear();
-        if (shouldSwap) {
-            [m, d] = [d, m];
-        }
         return `${y}/${m}/${d}`;
     };
 
@@ -622,11 +439,10 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
         return yearString;
     };
 
-    const DateDisplay = ({ value, isDate = true, isBirthDate = false, className = "" }: { value: string | undefined, isDate?: boolean, isBirthDate?: boolean, className?: string }) => {
+    const DateDisplay = ({ value, isDate = true, className = "" }: { value: string | undefined, isDate?: boolean, className?: string }) => {
         if (!value) return <span>..../..../.......</span>;
-        const displayValue = isDate ? formatDate(value, isBirthDate) : value;
-        const containsArabic = /[\u0600-\u06FF]/.test(displayValue);
-        return <span dir={containsArabic ? "rtl" : "ltr"} className={className} style={{ display: 'inline-block', unicodeBidi: 'embed' }}>{displayValue}</span>;
+        const displayValue = isDate ? formatDate(value) : value;
+        return <span dir="ltr" className={className} style={{ display: 'inline-block', unicodeBidi: 'embed' }}>{displayValue}</span>;
     };
 
     // هذا هو كلاس التنسيق الموحد لجميع المتغيرات (خط الرقعة + الأخضر الجزائري)
@@ -688,7 +504,7 @@ const CertificateCard: React.FC<CertificateProps> = ({ trainee, institution, spe
                         {/* هنا تم استخدام نفس الستايل (الأخضر وخط الرقعة) لاسم الطالب */}
                         <span className={`border-b border-slate-400 px-4 min-w-[280px] text-center ${VARIABLE_STYLE} text-4xl`}>{trainee.surname} {trainee.name}</span>
                         <span>المولود(ة) في:</span>
-                        <span className="border-b border-slate-400 px-4 inline-flex"><DateDisplay value={trainee.dob} isBirthDate={true} className={VARIABLE_STYLE} /></span>
+                        <span className="border-b border-slate-400 px-4 inline-flex"><DateDisplay value={trainee.dob} className={VARIABLE_STYLE} /></span>
                         <span>بـــــ:</span>
                         <span className={`border-b border-slate-400 px-4 flex-grow text-center ${VARIABLE_STYLE}`}>{trainee.pob}</span>
                     </p>
